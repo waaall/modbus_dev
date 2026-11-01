@@ -23,6 +23,11 @@ class FormState:
                 signal = field.textChanged
             signal.connect(self._notify)
 
+    @property
+    def programmatic(self):
+        """调用方可区分用户切换与导入恢复，不直接访问挂起层数。"""
+        return self._depth > 0
+
     def _notify(self, *_):
         if not self._depth:
             self._edited()

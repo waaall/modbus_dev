@@ -3,10 +3,7 @@ import struct
 
 from pymodbus.framer.rtu import FramerRTU
 from pymodbus.pdu import DecodePDU
-from pymodbus.pdu.register_message import (
-    ReadHoldingRegistersRequest, ReadInputRegistersRequest, WriteMultipleRegistersRequest,
-    WriteSingleRegisterRequest,
-)
+from .master_pdu import request_pdu
 
 from ..domain.events import Event
 from ..domain.transactions import Reply
@@ -51,6 +48,17 @@ class RtuEngine:
         self.uncertain = False  # Persists through reconnection.
         self.inflight = False
 
+    @property
+    def connected(self):
+        return self.port is not None
+
+    @property
+    def request_gap_s(self):
+        return self.config.serial.gap_ms / 1000
+
+    def prepare_cycle(self, requests):
+        """RTU 没有事务号容量限制，周期准备不改变串口状态。"""
+
     def connect(self):
         self.control.check()
         self.port = self.port_factory(self.config.serial)
@@ -72,11 +80,7 @@ class RtuEngine:
         self.emit(Event(code, message, level, "communication", details))
 
     def packet(self, request):
-        classes = {6: WriteSingleRegisterRequest, 16: WriteMultipleRegistersRequest, 3: ReadHoldingRegistersRequest,
-                   4: ReadInputRegistersRequest}
-        pdu = classes[request.function](dev_id=self.config.unit, address=request.address,
-                                       count=request.count, registers=list(request.registers))
-        return self.framer.buildFrame(pdu)
+        return self.framer.buildFrame(request_pdu(request, self.config.unit))
 
     def minimum_s(self, request):
         response_bytes = 8 if request.function in (6, 16) else 5 + 2 * request.count

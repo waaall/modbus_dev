@@ -56,9 +56,38 @@ class SessionRunner:
         if self.journal.failed.is_set():
             raise LogWriteError(self.journal.snapshot()["log_error"] or "Recording failed")
 
+    def _endpoint(self):
+        """诊断信息按传输返回真实端点，不用串口名称伪装 TCP 地址。"""
+        if self.config.usage.serial:
+            return dict(port=self.config.serial.port)
+        return dict(host=self.config.host, port=self.config.port)
+
+    def _connect(self):
+        """共用连接策略；引擎只负责一次有界连接，不进行隐式重试。"""
+        serial = self.config.usage.serial
+        try:
+            self.engine.connect()
+            self.counters["port_opens" if serial else "connection_opens"] += 1
+            self._state("running")
+            return True
+        except (OSError, ValueError) as exc:
+            self.engine.close()
+            self.counters["open_errors"] += 1
+            self._emit("port_open_failed" if serial else "tcp_connect_failed", str(exc), "ERROR", "connect",
+                       **self._endpoint(), traceback=traceback.format_exc(), retry_s=1)
+            if self.config.policy == "strict":
+                raise
+            self._state("reconnecting")
+            return False
+
     def _engine_event(self, event):
         details = dict(event.details)
-        details.update(slot=self.current_slot, port=self.config.serial.port, unit=self.config.unit)
+        details.update(slot=self.current_slot, **self._endpoint(), unit=self.config.unit)
+        if event.code == "write_outcome_unknown":
+            self.counters["write_outcome_unknown"] += 1
+            self.live.consume(Event("register_confirmation", event.message, "DEBUG", "communication",
+                                    dict(area="holding", direction="tx", address=details["address"],
+                                         count=details["count"], sampled_s=details["sent_s"], quality="outcome-unknown")))
         if event.code == "tx":
             request = self.current_request
             packet = details.get("hex", "")
@@ -114,8 +143,10 @@ class SessionRunner:
 
     def _transaction(self, request, deadline, slot, scheduled):
         self.current_request = request
-        reply = self.engine.exchange(request, deadline)
-        self.current_request = None
+        try:
+            reply = self.engine.exchange(request, deadline)
+        finally:
+            self.current_request = None
         if reply.status == "read":
             quality = "ambiguous" if reply.ambiguous else "received"
             if request.registers and reply.registers != request.registers:
@@ -123,7 +154,7 @@ class SessionRunner:
             self._value_event(request, reply.registers, "rx", reply.received_s,
                               quality)
         elif request.function in (6, 16) and reply.sent_s is not None:
-            quality = reply.status
+            quality = "outcome-unknown" if reply.outcome_unknown else reply.status
             if reply.status == "ack":
                 quality = "ambiguous" if reply.ambiguous else "confirmed"
             event = Event("register_confirmation", "写入应答状态", "DEBUG", "communication",
@@ -132,6 +163,8 @@ class SessionRunner:
             self.live.consume(event)
         status = reply.status + ("_ambiguous" if reply.ambiguous and reply.status in ("ack", "read", "exception") else "")
         self.counters[status] += 1
+        if reply.status == "connection_lost":
+            self.counters["io_errors"] += 1
         if reply.received_s is not None and reply.sent_s is not None:
             self.metrics["response_ms"].add((reply.received_s - reply.sent_s) * 1000)
         # A sticky correlation flag is historical evidence, not a fresh frame failure.
@@ -141,10 +174,11 @@ class SessionRunner:
         else:
             level = "WARNING"
         self._emit("transaction", status, level, "communication", slot=slot, status=status,
-                   port=self.config.serial.port, unit=self.config.unit, function=request.function,
+                   **self._endpoint(), unit=self.config.unit, function=request.function,
                    address=request.address, count=request.count, sent_s=reply.sent_s,
                    received_s=reply.received_s, deadline_s=deadline, timeout_ms=self.config.timeout_ms,
-                   ambiguous=reply.ambiguous, exception_code=reply.exception_code, detail=reply.detail)
+                   ambiguous=reply.ambiguous, exception_code=reply.exception_code,
+                   outcome_unknown=reply.outcome_unknown, detail=reply.detail)
         return reply
 
     def _value_event(self, request, registers, direction, sampled_s, quality):
@@ -167,8 +201,12 @@ class SessionRunner:
         try:
             # Resolve dependencies before creating output or acquiring hardware.
             if self.engine_factory is None:
-                from ..engines.rtu import RtuEngine
-                self.engine_factory = RtuEngine
+                if self.config.mode == "tcp-master":
+                    from ..engines.tcp_master import TcpMasterEngine
+                    self.engine_factory = TcpMasterEngine
+                else:
+                    from ..engines.rtu import RtuEngine
+                    self.engine_factory = RtuEngine
             from ..engines.platform import WindowsTimer
             usage = self.config.usage
             source = SyntheticSource(self.config) if usage.source else None
@@ -180,26 +218,16 @@ class SessionRunner:
                 self._state("starting")
                 self.engine = self.engine_factory(self.config, self.control, self._engine_event)
                 with WindowsTimer() as timer:
-                    self._emit("session_started", "RTU master starting", timer=timer.status,
-                               engine="pymodbus-codec/pyserial-deadline", policy=self.config.policy,
+                    self._emit("session_started", f"{self.config.mode} starting", timer=timer.status,
+                               engine="pymodbus-codec/pyserial-deadline" if usage.serial else "pymodbus-codec/tcp-deadline",
+                               mode=self.config.mode, **self._endpoint(), policy=self.config.policy,
                                schedule_late_basis=SCHEDULE_LATE_BASIS,
                                cycle_interval_limit_ms=self.config.cycle_interval_limit_ms,
                                schedule_tolerance_percent=self.config.schedule_tolerance_percent,
                                schedule_tolerance_ms=self.config.schedule_tolerance_ms)
-                    reconnect_at = started
-                    try:
-                        self.engine.connect()
-                        self.counters["port_opens"] += 1
-                        self._state("running")
-                    except (OSError, ValueError) as exc:
-                        self.counters["open_errors"] += 1
-                        self._emit("port_open_failed", str(exc), "ERROR", "connect",
-                                   port=self.config.serial.port, traceback=traceback.format_exc(), retry_s=1)
-                        if self.config.policy == "strict":
-                            raise
-                        reconnect_at = self.control.now() + 1
-                        self._state("reconnecting")
-                    # Establish the request schedule after initial COM setup.
+                    self._connect()
+                    reconnect_at = self.control.now() + 1
+                    # 首次连接尝试后建立统一的绝对周期，连接失败也不暂停源时钟。
                     origin = self.control.now() + .1
                     schedule = AbsoluteSchedule(origin, self.config.period_ms / 1000,
                                                 self.config.timeout_ms / 1000, self.config.policy)
@@ -216,32 +244,24 @@ class SessionRunner:
                         # Scheduling may overrun while sleeping or checking recording.
                         if self.control.now() - decision.scheduled_s >= schedule.period:
                             continue
-                        if self.engine.port is None:
+                        # 预先确定整轮计划；传输可在此释放需要轮换的连接，但不能暗中建连。
+                        values = source.sample(slot) if source is not None else ()
+                        requests = cycle_requests(self.config, values, slot=slot)
+                        self.engine.prepare_cycle(requests)
+                        if not self.engine.connected:
                             if self.control.now() < reconnect_at:
-                                self.counters["port_unavailable"] += 1
+                                self.counters["port_unavailable" if usage.serial else "connection_unavailable"] += 1
                                 slot += 1
                                 continue
-                            try:
-                                self.engine.connect()
-                                self.counters["port_opens"] += 1
-                                self._state("running")
-                            except (OSError, ValueError) as exc:
-                                self.counters["open_errors"] += 1
-                                self._emit("port_open_failed", str(exc), "ERROR", "connect",
-                                           port=self.config.serial.port, traceback=traceback.format_exc(), retry_s=1)
-                                if self.config.policy == "strict":
-                                    raise
+                            if not self._connect():
                                 reconnect_at = self.control.now() + 1
-                                self._state("reconnecting")
                                 slot += 1
                                 continue
                         self.control.check()
                         self.current_slot, self.current_scheduled = slot, decision.scheduled_s
-                        values = source.sample(slot) if source is not None else ()
-                        requests = cycle_requests(self.config, values, slot=slot)
                         # Reserve the complete remaining group plan before the first write.
                         minimum = sum(self.engine.minimum_s(r) for r in requests)
-                        minimum += (len(requests) - 1) * self.config.serial.gap_ms / 1000
+                        minimum += (len(requests) - 1) * self.engine.request_gap_s
                         if self.control.now() + minimum >= decision.deadline_s:
                             self.counters["schedule_missed"] += 1
                             self._emit("schedule_missed", "Insufficient budget for the complete cycle", "WARNING", slot=slot)
@@ -270,12 +290,15 @@ class SessionRunner:
                                     break
                         except (OSError, ValueError) as exc:
                             self.counters["io_errors"] += 1
-                            self.engine.mark_uncertain("Serial I/O failed; request or reply may remain in flight")
-                            self._emit("serial_io_error", str(exc), "ERROR", "communication",
-                                       slot=slot, port=self.config.serial.port, traceback=traceback.format_exc())
+                            if usage.serial:
+                                self.engine.mark_uncertain("Serial I/O failed; request or reply may remain in flight")
+                            self._emit("serial_io_error" if usage.serial else "tcp_io_error", str(exc), "ERROR", "communication",
+                                       slot=slot, **self._endpoint(), traceback=traceback.format_exc())
                             self.engine.close()
                             if self.config.policy == "strict":
                                 raise
+                        # TCP 超时/残帧由引擎关闭连接，RTU 仍保持原有的超时关联语义。
+                        if not self.engine.connected:
                             reconnect_at = self.control.now() + 1
                             self._state("reconnecting")
                         slot += 1
@@ -293,7 +316,7 @@ class SessionRunner:
                         self.engine.close()
                     except Exception as exc:
                         reason, error = "failed", f"Close failed: {exc}"
-                        self._emit("port_close_failed", str(exc), "ERROR")
+                        self._emit("port_close_failed" if usage.serial else "tcp_close_failed", str(exc), "ERROR")
                 self._state("failed" if error else "stopped")
                 result = dict(state=self.state, stop_reason=reason, error=error,
                               exit_code=1 if error else 130 if reason == "user_stopped" else 0,

@@ -4,6 +4,7 @@ import json
 from PySide6.QtCore import Signal, Qt
 from PySide6.QtWidgets import QHBoxLayout, QHeaderView, QLineEdit, QPlainTextEdit, QScrollArea, QTableWidget, QTabWidget, QVBoxLayout, QWidget
 from ..domain.transactions import valid_reply_counts
+from ..domain.usage import ParameterUsage
 from ..runtime import default_output_directory
 from .realtime_panel import RealtimePanel
 from .theme import METRICS, ui_font
@@ -137,7 +138,7 @@ class MonitorPanel(QScrollArea):
         mode = configuration.text("mode")
         self.mode = mode
         bind(self.connection_title, 'setText', CHOICE_LABELS.get(mode, mode))
-        endpoint = ("{}:{}".format(configuration.text("host"), configuration.text("port")) if mode == "tcp-slave" else
+        endpoint = ("{}:{}".format(configuration.text("host"), configuration.text("port")) if ParameterUsage(mode).tcp else
                     "{}  ·  {} baud".format(configuration.text("serial.port") or tr("No serial port selected"),
                                              configuration.text("serial.baud")))
         bind(self.connection_summary, 'setText', tr('{p0}  ·  Unit {p1}').format(p0=endpoint, p1=configuration.text('unit')))
@@ -203,7 +204,7 @@ class MonitorPanel(QScrollArea):
 
     def update_metrics(self):
         mode = self.counter_mode or self.mode
-        keys = (("write_attempts", "valid_ack", "valid_read", "schedule_late") if mode == "rtu-master" else
+        keys = (("write_attempts", "valid_ack", "valid_read", "schedule_late") if ParameterUsage(mode).master else
                 ("source_updates", "slave_request", "rx", "tx"))
         totals = valid_reply_counts(self.last_counters)
         for key, caption, value in zip(keys, self.metric_labels, self.metric_values):
@@ -224,7 +225,7 @@ class MonitorPanel(QScrollArea):
 
     def update_hint(self, usage, readonly):
         mode = usage.mode
-        if mode == "rtu-master":
+        if usage.master:
             text = tr('Each point runs its configured read or write operation; optional write readback uses FC03. All points share one cycle.')
         else:
             text = tr('Holding stores values for master reads and, when read/write access is enabled, retains master writes. Input values are generated locally for master reads only.')

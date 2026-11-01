@@ -1,7 +1,7 @@
 """将稳定的协议键映射为界面文案，供配置与监视组件共用。"""
 from .i18n import tr
 CHOICE_LABELS = {
-    "tcp-slave": tr('TCP slave'), "rtu-slave": tr('RTU slave'), "rtu-master": tr('RTU master'),
+    "tcp-slave": tr('TCP slave'), "tcp-master": tr('TCP master'), "rtu-slave": tr('RTU slave'), "rtu-master": tr('RTU master'),
     "continuous": tr('Continuous'), "strict": tr('Strict'), "constant": tr('Constant'), "sine": tr('Sine wave'),
     "triangle": tr('Triangle wave'),
     "read-only": tr('Read-only'), "read-write": tr('Read/write'),
@@ -17,6 +17,8 @@ COUNTER_LABELS = {
     "exception": tr('Protocol exceptions'), "exception_ambiguous": tr('Uncertain exception correlations'), "timeout": tr('Reply timeout'),
     "schedule_late": tr('Late cycles'), "schedule_missed": tr('Missed transaction budgets'), "skipped_slots": tr('Skipped cycles'),
     "port_unavailable": tr('Port unavailable'), "readback_mismatch": tr('Readback mismatch'),
+    "connection_opens": tr('TCP connections'), "connection_unavailable": tr('TCP connection unavailable'),
+    "connection_lost": tr('TCP connection lost'), "write_outcome_unknown": tr('Write outcome unknown'),
 }
 SCHEDULE_LATE_HELP = (tr('Count adjacent cycle-first send intervals only when they exceed the period plus tolerance; equality and the first send are excluded. For a 100 ms period with 10% tolerance, count intervals above 110 ms. Groups and readbacks within one cycle are not counted again. Planned offsets remain in the detailed logs and session summary.'))
 VALID_REPLY_HELP = tr('Count replies accepted within the transaction budget after frame and request-field checks, including uncertain correlations. This does not establish unique per-request correlation or device source quality.')
@@ -30,3 +32,4 @@ SLAVE_AREAS_HELP = (HOLDING_AREA_HELP + '\n' + INPUT_AREA_HELP + '\n'
 HOLDING_INITIAL_HELP = tr('Set only when the session starts. Later master writes are retained; the input register update period does not refresh this value.')
 INPUT_PERIOD_HELP = tr('20–60000 ms. All enabled input-register points share this local update period. It does not update holding registers or control how often the master reads.')
 MASTER_PERIOD_HELP = tr('20–60000 ms. Executes one round of configured point reads and writes per cycle. The minimum depends on the actual requests and includes one 10 ms workflow reserve per cycle.')
+TCP_MASTER_PERIOD_HELP = tr('20–60000 ms. All points share one polling cycle and one transaction budget. Network and device latency are not predicted from serial settings; expired cycles are not replayed.')

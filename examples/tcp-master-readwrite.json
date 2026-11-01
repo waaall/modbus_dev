@@ -1,0 +1,19 @@
+{
+  "schema_version": 4,
+  "mode": "tcp-master",
+  "host": "127.0.0.1",
+  "port": 1502,
+  "unit": 1,
+  "connect_timeout_ms": 1000,
+  "access_mode": "read-write",
+  "policy": "continuous",
+  "period_ms": 200,
+  "timeout_ms": 150,
+  "duration_s": 0,
+  "points": [
+    {"name": "输入温度", "address": 0, "operation": "read-input", "data_type": "float32", "byte_order": "B1234"},
+    {"name": "设定温度", "address": 0, "operation": "read-holding", "data_type": "float32", "byte_order": "B1234"},
+    {"name": "运行参数写入", "address": 20, "operation": "write-single", "data_type": "uint16", "byte_order": "B12", "source": {"kind": "constant", "value": 7}, "readback_every": 1},
+    {"name": "浮点波形写入", "address": 30, "operation": "write-multiple", "data_type": "float32", "byte_order": "B1234", "source": {"kind": "sine", "value": 10, "amplitude": 2, "frequency_hz": 0.5}, "readback_every": 1}
+  ]
+}

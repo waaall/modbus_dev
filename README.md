@@ -6,6 +6,7 @@
 - [Modbus RTU 基本概念](docs/modbus-basics.md)
 - [需求](docs/requirements.md)
 - [架构设计](docs/design.md)
+- [TCP 主站需求、设计与联调](docs/tcp-master.md)
 - [实施状态与验证计划](docs/implementation.md)
 
 ## 当前可用能力
@@ -21,6 +22,9 @@
 RTU 主站可选读取、逐个 / 批量写入、FC03 写后读回；最多八个独立常量/正弦/三角波测点、连续/严格策略、端口枚举、
 绝对周期调度、停止与重连、原始报文及有界异步日志。CLI 和 GUI 共用 SessionRunner。
 RTU 从站支持 FC03/04/06/16 和独立保持区 / 输入区；TCP 从站同样支持独立两区与 FC03/04/06/16；默认只读，写入需显式开放权限。
+TCP 主站支持同样的逐点 FC03/04/06/16、数据源、写后读回与监视，默认只读；
+一个会话连接一个目标 IP/端口/Unit ID，整轮共用交易预算，连接超时独立设置。
+本机配套分别运行两个窗口/进程，不在同一会话同时运行主从站；使用方法见[TCP 主站联调](docs/user-manual.md#tcp-主从站本机配套)。
 PySide6 单会话 GUI 已实现配置编辑/加载/保存、启动/停止、状态、计数、日志预览和结果目录。
 **macOS arm64 已完成 Cython 目录式便携包及本机实包验收；Windows x64 / 麒麟 x86_64
 仅有构建适配，待对应电脑验收。DYN/CSV 离线输入继续暂缓。validate 只校验配置，不代表功能已可运行。**
@@ -33,6 +37,8 @@ modbus-dev ports
 modbus-dev run examples/rtu-master.json --output results/my-first-run
 # TCP 只读从站默认监听 127.0.0.1:1502；Ctrl+C 停止。输出目录必须不存在。
 modbus-dev run examples/tcp-slave.json --output results/tcp-first-run
+# 另一个终端启动 TCP 只读主站，与上面的从站配套；Ctrl+C 停止。
+modbus-dev run examples/tcp-master.json --output results/tcp-master-first-run
 # RTU 只读从站：先修改示例串口；与主站使用不同端口或不同设备。
 modbus-dev run examples/rtu-slave.json --output results/rtu-slave-first-run
 python -m unittest discover -s tests -v
@@ -51,7 +57,7 @@ GUI 依赖可选，锁定 PySide6 6.7.2；普通 CLI 安装不需要 Qt。
 `src/modbus_dev/ui/theme.py` 管理。Windows 使用 GDI 字体后端、中文字体回退及完整字体像素对齐；
 由 Qt 处理逐显示器 DPI 与分数缩放，窗口按可用桌面调整大小，小屏保留滚动操作。
 详见 [GUI 设计与高 DPI 验证](docs/gui-design.md)。源码采用可编辑安装时，关闭并重新启动 GUI 即可加载界面更新。
-默认选择本机 TCP 只读从站。可切换 RTU 主站/从站、加载现有 JSON 示例、校验后启动。
+默认选择本机 TCP 只读从站。可切换 TCP 主站、RTU 主站/从站、加载现有 JSON 示例、校验后启动。
 “其他设置 → 界面”支持跟随系统、简体中文和 English；停止通信后切换立即生效，无需重启软件。
 全部配置在通信停止收尾完成后开放修改，普通参数由下一轮启动使用。
 自动保存兼容版本缺失或不匹配时，通信设置与语言恢复默认并覆盖旧设置；保留结果父目录路径和全部历史结果，不迁移旧草稿。

@@ -2,6 +2,7 @@
 from dataclasses import asdict, dataclass, field, replace
 from decimal import Decimal, InvalidOperation
 import json
+import ipaddress
 import math
 from pathlib import Path
 
@@ -227,9 +228,8 @@ class TaskConfig:
     mode: str = "rtu-master"
     policy: str = "continuous"
     unit: int = 1
-    points: tuple[PointConfig, ...] = field(default_factory=lambda: tuple(
-        default_point(i) for i in range(MAX_POINTS)))
-    access_mode: str = "read-write"
+    points: tuple[PointConfig, ...] | None = None
+    access_mode: str | None = None
     period_ms: int = 100
     schedule_tolerance_percent: float = 10.0
     timeout_ms: int = 80
@@ -237,11 +237,20 @@ class TaskConfig:
     serial: SerialConfig = field(default_factory=SerialConfig)
     host: str = "127.0.0.1"
     port: int = 1502
+    connect_timeout_ms: int = 1000
     logging: LoggingConfig = field(default_factory=LoggingConfig)
 
     def __post_init__(self):
+        # 新角色有安全的独立默认值；原有角色的构造默认值及显式操作保持不变。
+        if self.access_mode is None:
+            object.__setattr__(self, "access_mode", "read-only" if self.mode == "tcp-master" else "read-write")
+        if self.points is None:
+            points = tuple(default_point(i) for i in range(MAX_POINTS))
+            if self.mode == "tcp-master":
+                points = tuple(replace(point, operation="read-input") for point in points)
+            object.__setattr__(self, "points", points)
         # 主站区域由逐点功能码唯一确定，避免导出的区域与实际请求相矛盾。
-        if self.mode == "rtu-master":
+        if self.usage.master:
             object.__setattr__(self, "points", tuple(replace(point, area=(
                 "input" if point.operation == "read-input" else "holding"))
                 for point in self.points))
@@ -253,7 +262,9 @@ class TaskConfig:
         # 内部构造可省略版本；文件入口另行要求显式标记。旧版本在字段解析前拒绝。
         check_config_version(data.get("schema_version", CONFIG_VERSION))
         data = dict(section(data, "config", cls.__dataclass_fields__))
-        if data.get("mode") in ("rtu-slave", "tcp-slave"):
+        if "access_mode" in data and data["access_mode"] is None:
+            fail("access_mode", "must be one of read-only, read-write", reason="invalid_choice", choices="read-only, read-write")
+        if data.get("mode") in ("rtu-slave", "tcp-slave", "tcp-master"):
             data.setdefault("access_mode", "read-only")
         number(data.get("period_ms", 100), "period_ms", MIN_PERIOD_MS, MAX_PERIOD_MS, True)
         raw_points = data.pop("points", [{}])
@@ -263,6 +274,9 @@ class TaskConfig:
         for index, point in enumerate(raw_points):
             path = f"points[{index}]"
             section(point, path, PointConfig.__dataclass_fields__)
+            if data.get("mode") == "tcp-master":
+                point = dict(point)
+                point.setdefault("operation", "read-input")
             usage = ParameterUsage(data.get("mode", "rtu-master"), point.get("operation", "write-multiple"))
             points.append(PointConfig.from_mapping(point, path, source_used=usage.source))
         points.extend(default_point(i) for i in range(len(points), MAX_POINTS))
@@ -276,11 +290,10 @@ class TaskConfig:
 
     def validate(self):
         check_config_version(self.schema_version)
-        choice(self.mode, "mode", ("rtu-master", "rtu-slave", "tcp-slave"))
+        choice(self.mode, "mode", ("rtu-master", "rtu-slave", "tcp-slave", "tcp-master"))
         choice(self.policy, "policy", ("continuous", "strict"))
         usage = self.usage
-        if usage.serial or self.mode == "tcp-slave":
-            choice(self.access_mode, "access_mode", ("read-only", "read-write"))
+        choice(self.access_mode, "access_mode", ("read-only", "read-write"))
         number(self.unit, "unit", 1, 247, True)
         number(self.period_ms, "period_ms", MIN_PERIOD_MS, MAX_PERIOD_MS, True)
         if usage.master:
@@ -317,6 +330,15 @@ class TaskConfig:
         else:
             text(self.host, "host")
             number(self.port, "port", 1, 65535, True)
+        if self.mode == "tcp-master":
+            # 只接受数值 IP，避免系统 DNS 查询越过连接期限或阻塞停止。
+            try:
+                ipaddress.ip_address(self.host)
+            except ValueError:
+                fail("host", "TCP master requires a numeric IP address", reason="numeric_ip")
+            number(self.connect_timeout_ms, "connect_timeout_ms", 1, 60000, True)
+            if self.timeout_ms >= self.period_ms:
+                fail("timeout_ms", "cycle budget must be smaller than the polling period", reason="tcp_cycle_budget")
         self.logging.validate()
         if self.mode == "rtu-master":
             from .wire import cycle_budget
@@ -348,7 +370,7 @@ class TaskConfig:
         return point.readback_every
 
     def point_area(self, point):
-        if self.mode == "rtu-master":
+        if self.usage.master:
             return "input" if self.point_usage(point).operation == "read-input" else "holding"
         return point.area
 

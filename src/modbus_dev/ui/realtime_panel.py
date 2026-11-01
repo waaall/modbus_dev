@@ -21,7 +21,8 @@ QUALITY_NAMES = {"submitted": tr('Submitted for transmission'), "received": tr('
                  "readback-mismatch": tr('Readback mismatch'), "nonfinite": tr('Non-finite float32 / raw value')}
 CONFIRMATION_NAMES = {"confirmed": tr('Valid ACK received'), "ambiguous": tr('Valid ACK received; correlation uncertain'),
                       "timeout": tr('Reply timeout'), "exception": tr('Exception reply'), "bad_reply": tr('Invalid / incomplete reply'),
-                      "late_reply": tr('Late reply')}
+                      "late_reply": tr('Late reply'), "outcome-unknown": tr('Write outcome unknown'),
+                      "connection_lost": tr('TCP connection lost')}
 
 
 class TrendPlot(QWidget):
@@ -260,6 +261,9 @@ class RealtimePanel(QWidget):
             stale = self.snapshot.get("state") != "running" or age > self.snapshot.get("stale_after_s", 1.)
             if stale:
                 quality = tr('Stopped / stale') if not self.running else tr('Stale / waiting for data')
+                # 失效只说明数值不再新鲜，不能抹去可能已执行的写入风险。
+                if last.get("confirmation") == "outcome-unknown":
+                    quality += " · " + tr('Write outcome unknown')
             name = last["name"]
             if self.config is not None:
                 name = self.config.points[last["point"]].name or tr("Point {p0}").format(p0=last["point"] + 1)

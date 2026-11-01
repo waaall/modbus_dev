@@ -30,6 +30,8 @@ TEMPLATES = {
     "holding_initial": tr("Holding registers accept an initial constant only; use input registers for continuous source updates."),
     "duplicate_field": tr("Duplicate configuration field: {field}."),
     "invalid_json": tr("Invalid JSON at line {line}, column {column}."),
+    "numeric_ip": tr("TCP master requires a numeric IPv4 or IPv6 address."),
+    "tcp_cycle_budget": tr("The whole-cycle transaction budget must be smaller than the polling period."),
 }
 
 FIELD_NAMES = {
@@ -38,6 +40,7 @@ FIELD_NAMES = {
     "period_ms": tr("Data period (ms)"), "timeout_ms": tr("I/O timeout (ms)"), "duration_s": tr("Duration (s)"),
     "points": tr("Points"), "schema_version": tr("Configuration version"),
     "logging.max_files": tr("Maximum log segments"),
+    "connect_timeout_ms": tr("Connection timeout (ms)"),
 }
 
 
@@ -45,8 +48,9 @@ def format_error(error):
     if isinstance(error, ConfigurationError):
         source = TEMPLATES.get(error.reason)
         if source is not None:
+            field = tr("Target IP address") if error.reason == "numeric_ip" else FIELD_NAMES.get(error.path, error.path)
             return tr("{field}: {message}").format(
-                field=FIELD_NAMES.get(error.path, error.path), message=source.format(**error.parameters))
+                field=field, message=source.format(**error.parameters))
     if str(error) == "This build runs constant/sine/triangle sources only; offline sources are deferred until after GUI":
         return tr("This build supports constant, sine and triangle sources only; offline sources are not available.")
     return str(error)

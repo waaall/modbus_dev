@@ -30,6 +30,13 @@ GUI 默认选择本机 TCP 只读从站，尚未启动通信。默认结果目�
 RTU 示例端口必须改为本机实际设备；`rtu-master` 会写寄存器，
 连接真实设备前务必核对站号、波特率、地址和数据。不要将串口驱动、管理员权限或现场验收视为包内能力。
 
+支持 TCP 主站的版本可在两个窗口分别加载 `examples/tcp-slave.json` 与 `examples/tcp-master.json`，
+先启动从站再启动主站。每个窗口仍只运行一个会话；主站目标 IP、端口、Unit ID 应与从站一致。
+新建 TCP 主站默认只读，四种寄存器操作及逐点读回与 RTU 主站一致；连接超时独立设置，
+周期通信预算为全部测点共用的一轮预算，不使用串口线路公式。
+`examples/tcp-master-readwrite.json` 已明确开放写入，须配合 `examples/tcp-independent-points.json`，
+它会实际改写保持区，请勿未经确认用于现场设备。旧发布包不因更新源码自动获得新角色，需重新构建并验收。
+
 GUI 经包内独立 CLI 的 `worker` 子命令运行通信；stdin 是停止指令，stdout 是版本化 JSONL，
 stderr 是诊断。停止默认等待最多 5 秒；强制退出不能算正常收尾，需检查 `gui-worker-error.json`。
 

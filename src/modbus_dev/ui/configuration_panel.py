@@ -1,7 +1,7 @@
 """会话配置与逐点编码编辑，共用领域校验并保留无关参数草稿。"""
 from .i18n import tr, bind, make_button, group_box, add_item, add_tab, retranslate_tree
 import json
-from PySide6.QtCore import Signal, Qt
+from PySide6.QtCore import QSignalBlocker, Signal, Qt
 from PySide6.QtWidgets import QComboBox, QFormLayout, QFrame, QHBoxLayout, QLineEdit, QScrollArea, QTabWidget, QVBoxLayout, QWidget
 from ..application.session import check_capabilities
 from ..domain.config import MAX_POINTS, MIN_PERIOD_MS, MAX_PERIOD_MS, PointConfig, TaskConfig, point_conflicts
@@ -12,7 +12,7 @@ from .point_editor import PointEditor
 from .point_tabs import PointTabs
 from .theme import METRICS
 from .widgets import CheckBox, ComboBox, SerialPortComboBox, label, refresh_style
-from .texts import CHOICE_LABELS, SCHEDULE_LATE_HELP, SLAVE_AREAS_HELP, INPUT_PERIOD_HELP, MASTER_PERIOD_HELP
+from .texts import CHOICE_LABELS, SCHEDULE_LATE_HELP, SLAVE_AREAS_HELP, INPUT_PERIOD_HELP, MASTER_PERIOD_HELP, TCP_MASTER_PERIOD_HELP
 from .form_state import FormState, programmatic_changes
 from .defaults import default_task_config
 
@@ -30,6 +30,7 @@ class ConfigurationPanel(QFrame):
         self.fields = {}
         self._busy = False
         self._applying = False
+        self._last_mode = None
         self.configuration_valid = True
         self.base_config = default_task_config().to_mapping()
         self._build_ui()
@@ -131,10 +132,12 @@ class ConfigurationPanel(QFrame):
             return box
 
         connection = page(tr('Connection and timing'))
-        group(connection, tr('Communication mode'), [("mode", tr('Mode'), ["tcp-slave", "rtu-slave", "rtu-master"]),
+        group(connection, tr('Communication mode'), [("mode", tr('Mode'), ["tcp-slave", "rtu-slave", "rtu-master", "tcp-master"]),
                                       ("policy", tr('Run policy'), ["continuous", "strict"])])
         self.access_box = group(connection, tr('Access permission'), [("access_mode", tr('Access'), ["read-only", "read-write"])])
-        self.tcp_box = group(connection, tr('TCP listener'), [("host", tr('Bind address'), None), ("port", tr('Port'), None)])
+        self.tcp_box = group(connection, tr('TCP listener'), [("host", tr('Bind address'), None), ("port", tr('Port'), None),
+                                                            ("connect_timeout_ms", tr('Connection timeout (ms)'), None)])
+        bind(self.fields['connect_timeout_ms'], 'setToolTip', tr('1–60000 ms. Limits one connection attempt, separately from the whole-cycle transaction budget.'))
         self.serial_box = group(connection, tr('Serial connection'), [("serial.port", tr('Serial port'), None),
                                                        ("serial.baud", tr('Baud rate'), ["1200", "2400", "4800", "9600", "19200", "38400",
                                                                               "57600", "115200"]),
@@ -240,7 +243,7 @@ class ConfigurationPanel(QFrame):
     def configuration(self, *, validate=True):
         data = json.loads(json.dumps(self.base_config))
         usage = self.parameter_usage()
-        integers = {"unit", "port", "period_ms", "timeout_ms",
+        integers = {"unit", "port", "period_ms", "timeout_ms", "connect_timeout_ms",
                     "serial.baud", "serial.stop_bits", "logging.max_files"}
         floats = {"duration_s", "schedule_tolerance_percent"}
         for key in self.fields:
@@ -290,14 +293,30 @@ class ConfigurationPanel(QFrame):
 
     def mode_changed(self, *_):
         mode = self.text("mode")
-        self.tcp_box.setVisible(mode == "tcp-slave")
-        self.tcp_box.setEnabled(mode == "tcp-slave")
-        self.serial_box.setVisible(mode != "tcp-slave")
-        self.serial_box.setEnabled(mode != "tcp-slave")
+        usage = ParameterUsage(mode)
+        previous, self._last_mode = self._last_mode, mode
+        # 用户切入新主站角色时先关闭写权限；导入和恢复时尊重明确保存的权限及操作。
+        if (mode == 'tcp-master' and previous != mode and not self._applying
+                and not self.form_state.programmatic):
+            with QSignalBlocker(self.fields['access_mode']):
+                self.fields['access_mode'].setCurrentIndex(self.fields['access_mode'].findData('read-only'))
+            if previous is not None and not ParameterUsage(previous).master:
+                for editor in self.point_editors:
+                    editor.fields['operation'].set_draft_value(
+                        'read-input' if editor.fields['area'].currentData() == 'input' else 'read-holding')
+        self.tcp_box.setVisible(usage.tcp)
+        self.tcp_box.setEnabled(usage.tcp)
+        bind(self.tcp_box, 'setTitle', tr('TCP target') if usage.master else tr('TCP listener'))
+        host_caption = tr('Target IP address') if usage.master else tr('Bind address')
+        bind(self.tcp_box.layout().labelForField(self.fields['host']), 'setText', host_caption)
+        bind(self.fields['host'], 'setAccessibleName', host_caption)
+        self.tcp_box.layout().setRowVisible(self.fields['connect_timeout_ms'], mode == 'tcp-master')
+        self.serial_box.setVisible(usage.serial)
+        self.serial_box.setEnabled(usage.serial)
         self.access_box.setVisible(True)
         self.access_box.setEnabled(True)
-        self.master_box.setVisible(mode == "rtu-master")
-        self.master_box.setEnabled(mode == "rtu-master")
+        self.master_box.setVisible(usage.master)
+        self.master_box.setEnabled(usage.master)
         self.operation_changed()
 
 
@@ -321,8 +340,8 @@ class ConfigurationPanel(QFrame):
         timeout_caption = tr('Cycle budget (ms)') if usage.master else tr('Reply write timeout (ms)') if usage.serial else tr('Partial request timeout (ms)')
         bind(timing.labelForField(self.fields['timeout_ms']), 'setText', timeout_caption)
         bind(self.fields['timeout_ms'], 'setAccessibleName', timeout_caption)
-        bind(self.fields['period_ms'], 'setToolTip', MASTER_PERIOD_HELP if usage.master else INPUT_PERIOD_HELP)
-        bind(self.fields['timeout_ms'], 'setToolTip', tr('Budget for the entire cycle, including the silent interval and all requests.') if usage.master else tr('Wait for one reply write, capped at 50 ms.') if usage.serial else tr('Fixed deadline for receiving a partial request, at least 1000 ms.'))
+        bind(self.fields['period_ms'], 'setToolTip', (MASTER_PERIOD_HELP if usage.serial else TCP_MASTER_PERIOD_HELP) if usage.master else INPUT_PERIOD_HELP)
+        bind(self.fields['timeout_ms'], 'setToolTip', tr('All requests and readbacks share one deadline from the planned cycle time. The budget must be smaller than the polling period.') if mode == 'tcp-master' else tr('Budget for the entire cycle, including the silent interval and all requests.') if usage.master else tr('Wait for one reply write, capped at 50 ms.') if usage.serial else tr('Fixed deadline for receiving a partial request, at least 1000 ms.'))
         if usage.master:
             bind(self.data_note, 'setText', tr('Choose an operation, address, type and byte order for each point. Read values come from the slave; only write points use a local source. Contiguous points with the same operation may share one request.'))
         else:
@@ -345,6 +364,8 @@ class ConfigurationPanel(QFrame):
                 message = tr('{points} points → {requests} requests (busiest cycle). Line {line:.3f} ms + workflow 10 ms; minimum {minimum} ms, yellow below {warning} ms. Current {period} ms.').format(
                     points=len(config.enabled_points), requests=budget.transactions, line=budget.line_ms,
                     minimum=budget.minimum_period_ms, warning=budget.warning_period_ms, period=config.period_ms)
+            elif config.mode == 'tcp-master':
+                message = TCP_MASTER_PERIOD_HELP
             else:
                 message = INPUT_PERIOD_HELP
             try:
@@ -365,7 +386,7 @@ class ConfigurationPanel(QFrame):
 
     def update_points_summary(self):
         # 地址冲突以区域为边界，主站区域由每点操作推导。
-        master = self.text('mode') == 'rtu-master'
+        master = ParameterUsage(self.text('mode')).master
         points = [PointConfig(enabled=editor.enabled.isChecked(), address=editor.fields['address'].value(),
                               data_type=editor.current_data_type(), area=(
                                   'input' if editor.fields['operation'].draft_value() == 'read-input' else 'holding')

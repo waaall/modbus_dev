@@ -5,6 +5,7 @@
 ## 记录索引
 
 - [阶段实施记录](../implementation.md)
+- [2026-11-01 TCP 主站源码与双窗口配套验证](tcp-master-20261101.md)
 - [2026-10-28 发布流程修复与 Windows 实包验收](release-fixes-windows-20261028.md)
 - [2026-10-27 通用数值类型源码验证](numeric-types-20261027.md)
 - [2026-10-23 ec6829e 提交检查与 Windows 本机验证](review-ec6829e-windows-20261023.md)

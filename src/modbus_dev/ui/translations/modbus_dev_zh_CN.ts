@@ -1388,5 +1388,57 @@ Input: read with FC04; the source updates values continuously, unaffected by mas
       <source>Configuration version</source>
       <translation>配置版本</translation>
     </message>
+    <message>
+      <source>1–60000 ms. Limits one connection attempt, separately from the whole-cycle transaction budget.</source>
+      <translation>1～60000ms。限制单次连接尝试，与整轮交易预算独立。</translation>
+    </message>
+    <message>
+      <source>20–60000 ms. All points share one polling cycle and one transaction budget. Network and device latency are not predicted from serial settings; expired cycles are not replayed.</source>
+      <translation>20～60000ms。所有测点共用轮询周期和整轮交易预算；不根据串口参数估算网络及设备耗时，过期周期不补发。</translation>
+    </message>
+    <message>
+      <source>All requests and readbacks share one deadline from the planned cycle time. The budget must be smaller than the polling period.</source>
+      <translation>全部请求与读回共用从计划周期时刻计算的截止时间；预算必须小于轮询周期。</translation>
+    </message>
+    <message>
+      <source>Connection timeout (ms)</source>
+      <translation>连接超时（ms）</translation>
+    </message>
+    <message>
+      <source>TCP connection lost</source>
+      <translation>TCP 连接中断</translation>
+    </message>
+    <message>
+      <source>TCP connection unavailable</source>
+      <translation>TCP 连接不可用</translation>
+    </message>
+    <message>
+      <source>TCP connections</source>
+      <translation>TCP 连接次数</translation>
+    </message>
+    <message>
+      <source>TCP master</source>
+      <translation>TCP 主站</translation>
+    </message>
+    <message>
+      <source>TCP master requires a numeric IPv4 or IPv6 address.</source>
+      <translation>TCP 主站需要数值形式的 IPv4 或 IPv6 地址。</translation>
+    </message>
+    <message>
+      <source>TCP target</source>
+      <translation>TCP 目标</translation>
+    </message>
+    <message>
+      <source>Target IP address</source>
+      <translation>目标 IP 地址</translation>
+    </message>
+    <message>
+      <source>The whole-cycle transaction budget must be smaller than the polling period.</source>
+      <translation>整轮交易预算必须小于轮询周期。</translation>
+    </message>
+    <message>
+      <source>Write outcome unknown</source>
+      <translation>写入结果未知</translation>
+    </message>
   </context>
 </TS>

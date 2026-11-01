@@ -1,4 +1,4 @@
-"""Library-independent transaction contracts."""
+"""与协议库无关的请求和应答契约；单笔执行未知与应答关联风险分开记录。"""
 from dataclasses import dataclass
 
 
@@ -25,6 +25,7 @@ class Reply:
     ambiguous: bool = False
     detail: str = ""
     exception_code: int | None = None
+    outcome_unknown: bool = False
 
 
 class StopRequested(Exception):

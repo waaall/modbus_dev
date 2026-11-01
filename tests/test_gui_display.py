@@ -97,7 +97,7 @@ window.close()
                 self.assertAlmostEqual(report["dpr"], scale)
                 self.assertTrue(any("YaHei" in family for family in report["fonts"]))
                 self.assertTrue(all(height == 36 for height in report["control_heights"].values()))
-                self.assertEqual(len(report["screenshots"]), 9)
+                self.assertEqual(len(report["screenshots"]), 12)
                 self.assertTrue(all(size <= available for size, available in
                                     zip(report["logical_size"], report["available_size"])))
                 for screenshot in report["screenshots"]:

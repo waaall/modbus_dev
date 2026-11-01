@@ -17,7 +17,7 @@ def main(argv=None):
     commands = parser.add_subparsers(dest="command", required=True)
     validate = commands.add_parser("validate", help="validate task configuration without opening a device")
     validate.add_argument("config")
-    run = commands.add_parser("run", help="run one RTU master or independent-bank RTU/TCP slave session (constant/sine/triangle)")
+    run = commands.add_parser("run", help="run one RTU/TCP master or slave session (constant/sine/triangle)")
     run.add_argument("config")
     run.add_argument("--output", required=True, help="new result directory; existing directories are refused")
     commands.add_parser("ports", help="list serial ports without opening them")
@@ -69,6 +69,16 @@ def main(argv=None):
             return result["exit_code"]
         result = dict(valid=True, schema_version=config.schema_version, mode=config.mode,
                       period_ms=config.period_ms, configuration_only=True)
+        if config.mode == "tcp-master":
+            from .application.timing import SCHEDULE_LATE_BASIS
+            from .domain.operations import cycle_requests
+            result.update(host=config.host, port=config.port, connect_timeout_ms=config.connect_timeout_ms,
+                          timeout_ms=config.timeout_ms, timeout_basis="whole_cycle",
+                          request_count=len(cycle_requests(config, slot=0)),
+                          schedule_tolerance_percent=config.schedule_tolerance_percent,
+                          schedule_tolerance_ms=config.schedule_tolerance_ms,
+                          schedule_late_basis=SCHEDULE_LATE_BASIS,
+                          cycle_interval_limit_ms=config.cycle_interval_limit_ms)
         if config.mode == "rtu-master":
             from .application.timing import SCHEDULE_LATE_BASIS
             budget = cycle_budget(config)

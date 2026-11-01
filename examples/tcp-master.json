@@ -1,0 +1,17 @@
+{
+  "schema_version": 4,
+  "mode": "tcp-master",
+  "host": "127.0.0.1",
+  "port": 1502,
+  "unit": 1,
+  "connect_timeout_ms": 1000,
+  "access_mode": "read-only",
+  "policy": "continuous",
+  "period_ms": 100,
+  "timeout_ms": 80,
+  "duration_s": 0,
+  "points": [
+    {"name": "输入波形", "address": 0, "operation": "read-input", "data_type": "float32", "byte_order": "B1234"},
+    {"name": "保持区数值", "address": 0, "operation": "read-holding", "data_type": "float32", "byte_order": "B1234"}
+  ]
+}

@@ -1,4 +1,4 @@
-"""渲染三类通信模式的设置页与八测点标签编辑区，不打开通信端口。"""
+"""渲染四类通信模式的设置页与八测点标签编辑区，不打开通信端口。"""
 import argparse
 import ctypes
 import json
@@ -70,7 +70,7 @@ def main():
                      dict(address=2, name="压力", source=dict(kind="sine", value=10, amplitude=2, frequency_hz=.5)),
                      dict(address=4, name="流量", source=dict(value=-3.5)),
                      dict(enabled=False, address=6, name="备用")]))
-    for mode in ("tcp-slave", "rtu-slave", "rtu-master"):
+    for mode in ("tcp-slave", "rtu-slave", "rtu-master", "tcp-master"):
         window.apply_config(TaskConfig.from_mapping(dict(
             schema_version=CONFIG_VERSION, mode=mode, serial=dict(port="COM11"), duration_s=0,
             **encoding)))

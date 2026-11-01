@@ -219,9 +219,15 @@ class GuiTests(unittest.TestCase):
         self.app.processEvents()
         QTest.keyClick(mode.view(), Qt.Key_End)
         QTest.keyClick(mode.view(), Qt.Key_Return)
-        self.assertEqual(self.window.text("mode"), "rtu-master")
+        self.assertEqual(self.window.text("mode"), mode.itemData(mode.count() - 1))
+        # 新增角色后，末项不再固定为 RTU；以下数据源断言仍明确验证 RTU 主站。
+        mode.setCurrentIndex(mode.findData("rtu-master"))
         self.assertFalse(self.window.master_box.isHidden())
         point = self.window.point_editors[0]
+        # TCP 新角色会安全地切到只读；测试写入数据源前显式恢复读写与写操作。
+        access = self.window.fields["access_mode"]
+        access.setCurrentIndex(access.findData("read-write"))
+        point.fields["operation"].setCurrentIndex(point.fields["operation"].findData("write-multiple"))
         source = point.fields["source.kind"]
         source.setCurrentIndex(source.findData("sine"))
         self.assertTrue(point.fields["source.amplitude"].isEnabled())
@@ -241,7 +247,7 @@ class GuiTests(unittest.TestCase):
     def test_visible_controls_share_the_same_height(self):
         from PySide6.QtWidgets import QComboBox, QLineEdit, QPushButton, QSpinBox
         from modbus_dev.gui_theme import METRICS
-        for mode in ("tcp-slave", "rtu-slave", "rtu-master"):
+        for mode in ("tcp-slave", "rtu-slave", "rtu-master", "tcp-master"):
             self.window.apply_config(TaskConfig.from_mapping(dict(mode=mode, serial=dict(port="TEST"))))
             for tab in range(self.window.config_tabs.count()):
                 self.window.config_tabs.setCurrentIndex(tab)

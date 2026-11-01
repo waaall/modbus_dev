@@ -12,7 +12,11 @@ class ParameterUsage:
 
     @property
     def master(self):
-        return self.mode == "rtu-master"
+        return self.mode in ("rtu-master", "tcp-master")
+
+    @property
+    def tcp(self):
+        return self.mode in ("tcp-master", "tcp-slave")
 
     @property
     def serial(self):
@@ -38,7 +42,9 @@ class ParameterUsage:
         if key.startswith("serial."):
             return self.serial
         if key in ("host", "port"):
-            return self.mode == "tcp-slave"
+            return self.tcp
+        if key == "connect_timeout_ms":
+            return self.mode == "tcp-master"
         if key == "schedule_tolerance_percent":
             return self.master
         if key == "readback_every":
