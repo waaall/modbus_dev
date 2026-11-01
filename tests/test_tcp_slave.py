@@ -113,6 +113,17 @@ class TcpSlaveTests(unittest.TestCase):
             other.sendall(frame(b"\x03\x00\x00\x00\x02"))
             self.assertEqual(receive(other), frame(b"\x03\x04" + struct.pack(">f", 12.5)))
 
+    def test_half_closed_client_receives_response_without_disrupting_the_session(self):
+        with socket.create_connection(self.engine.bound_address, timeout=1) as healthy:
+            self.client.sendall(frame(b"\x03\x00\x00\x00\x02"))
+            self.client.shutdown(socket.SHUT_WR)
+            self.assertEqual(receive(self.client), frame(b"\x03\x04" + struct.pack(">f", 12.5)))
+            self.assertEqual(self.client.recv(1), b"")
+            # 已连接的其他客户端仍可请求，真实 SessionRunner 不因残留事件失败。
+            healthy.sendall(frame(b"\x04\x00\x00\x00\x02"))
+            self.assertEqual(receive(healthy), frame(b"\x04\x04" + struct.pack(">f", 12.5)))
+            self.assertTrue(self.thread.is_alive())
+
     def test_source_clock_advances_without_reads(self):
         time.sleep(.23)
         self.assertGreaterEqual(self.runner.counters["source_updates"], 3)
