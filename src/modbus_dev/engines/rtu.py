@@ -154,6 +154,18 @@ class RtuEngine:
                     self.mark_uncertain("CRC rejected response candidate")
                     self._event("crc_rejected", "Response candidate failed CRC", "WARNING", hex=candidate.hex())
                     continue
+                # 先校验线上长度，防止库忽略奇数载荷末尾字节后误报有效读取。
+                # 异常应答不含字节数字段，仍交由下方的异常 PDU 解码处理。
+                if candidate[1] in (3, 4):
+                    expected_bytes = request.count * 2
+                    expected_length = 5 + expected_bytes
+                    if candidate[2] != expected_bytes or len(candidate) != expected_length:
+                        self.mark_uncertain("Read response byte count or frame length does not match request")
+                        self._event("reply_mismatch", "Read response byte count or frame length does not match request",
+                                    "WARNING", expected_count=request.count, expected_byte_count=expected_bytes,
+                                    actual_byte_count=candidate[2], expected_frame_size=expected_length,
+                                    actual_frame_size=len(candidate), hex=candidate.hex())
+                        continue
                 try:
                     pdu = self.decoder.decode(candidate[1:-2])
                 except struct.error:
