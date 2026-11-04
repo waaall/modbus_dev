@@ -420,7 +420,9 @@ def load_config(path):
     # 整数源值先按 JSON 中的十进制精确检查；其他字段仍按原来的 float 语义处理。
     if isinstance(data, dict) and isinstance(data.get("points"), list):
         for index, point in enumerate(data["points"]):
-            if not isinstance(point, dict) or point.get("enabled", True) is not True or not ParameterUsage(data.get("mode", "rtu-master"), point.get("operation", "write-multiple")).source:
+            mode = data.get("mode", "rtu-master")
+            default_operation = "read-input" if mode == "tcp-master" else "write-multiple"
+            if not isinstance(point, dict) or point.get("enabled", True) is not True or not ParameterUsage(mode, point.get("operation", default_operation)).source:
                 continue
             data_type = point.get("data_type", "float32")
             source = point.get("source")

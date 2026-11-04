@@ -73,6 +73,8 @@ def main():
     for mode in ("tcp-slave", "rtu-slave", "rtu-master", "tcp-master"):
         window.apply_config(TaskConfig.from_mapping(dict(
             schema_version=CONFIG_VERSION, mode=mode, serial=dict(port="COM11"), duration_s=0,
+            # 仅构造离线预览，允许导入点表保留显式写操作；不启动通信。
+            **(dict(access_mode="read-write") if mode == "tcp-master" else {}),
             **encoding)))
         for tab in range(window.config_tabs.count()):
             window.config_tabs.setCurrentIndex(tab)

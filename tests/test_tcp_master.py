@@ -4,7 +4,6 @@ import errno
 import io
 import json
 from pathlib import Path
-import signal
 import socket
 import struct
 import subprocess
@@ -17,7 +16,7 @@ import unittest
 from modbus_dev.application.control import Control
 from modbus_dev.application.session import SessionRunner
 from modbus_dev.cli import main
-from modbus_dev.domain.config import TaskConfig
+from modbus_dev.domain.config import TaskConfig, load_config
 from modbus_dev.domain.events import ConfigurationError
 from modbus_dev.domain.transactions import Request, StopRequested
 from modbus_dev.engines.tcp_master import TcpMasterEngine
@@ -133,6 +132,19 @@ class BytePeer:
 
 
 class TcpConfigurationTests(unittest.TestCase):
+    def test_file_default_read_ignores_inactive_integer_source(self):
+        data = dict(schema_version=4, mode="tcp-master", points=[
+            dict(data_type="uint16", source=dict(value=.5))])
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "task.json"
+            path.write_text(json.dumps(data), encoding="utf-8")
+            self.assertEqual(load_config(path), TaskConfig.from_mapping(data))
+            data["access_mode"] = "read-write"
+            data["points"][0]["operation"] = "write-single"
+            path.write_text(json.dumps(data), encoding="utf-8")
+            with self.assertRaises(ConfigurationError):
+                load_config(path)
+
     def test_defaults_and_roundtrip_are_safe_without_changing_rtu_defaults(self):
         for config in (configuration(), TaskConfig(mode="tcp-master")):
             config.validate()
@@ -466,8 +478,8 @@ def slave_process(directory, points):
     path = root / "slave-config.json"
     path.write_text(json.dumps(config.to_mapping()), encoding="utf-8")
     with (root / "slave-stdout.log").open("w") as out, (root / "slave-stderr.log").open("w") as err:
-        process = subprocess.Popen([sys.executable, "-m", "modbus_dev", "run", str(path), "--output", str(root / "slave")],
-                                   stdout=out, stderr=err)
+        process = subprocess.Popen([sys.executable, "-m", "modbus_dev", "worker", str(path), "--output", str(root / "slave")],
+                                   stdin=subprocess.PIPE, stdout=out, stderr=err)
         try:
             deadline = time.monotonic() + 5
             while True:
@@ -482,13 +494,12 @@ def slave_process(directory, points):
                     time.sleep(.02)
             yield port
         finally:
-            if process.poll() is None:
-                process.send_signal(signal.SIGTERM)
+            # worker 的协议停止会等待日志收尾，Windows SIGTERM 则强制终止。
             try:
-                process.wait(5)
+                process.communicate(input=b'{"schema_version":1,"command":"stop"}\n', timeout=5)
             except subprocess.TimeoutExpired:
                 process.kill()
-                process.wait(5)
+                process.communicate(timeout=5)
 
 
 class TcpProcessTests(unittest.TestCase):
