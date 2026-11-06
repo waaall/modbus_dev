@@ -25,8 +25,8 @@ class MasterFaultIsolationTests(unittest.TestCase):
             observed.append((function, address))
             if address == 0 and failure == 'timeout':
                 return []
-            if address == 0 and failure in ('exception', 'ambiguous-exception'):
-                response = bytes((function | 0x80, 2))
+            if address == 0 and failure in ('exception', 'ambiguous-exception', 'zero-exception'):
+                response = bytes((function | 0x80, 0 if failure == 'zero-exception' else 2))
             elif function in (6, 16):
                 response = pdu[:5]
             else:
@@ -99,6 +99,25 @@ class MasterFaultIsolationTests(unittest.TestCase):
         result, observed = self.exercise('rtu', points, 'ambiguous-exception')
         self.assertNotIn((4, 4), observed)
         self.assertEqual(result['counters']['exception_ambiguous'], 3)
+
+    def test_zero_exception_code_does_not_release_later_requests(self):
+        for operation in ('read-holding', 'read-input', 'write-single', 'write-multiple'):
+            points = [dict(operation=operation, data_type='uint16', address=address,
+                           readback_every=1, source=dict(value=7)) for address in (0, 4)]
+            for transport in ('tcp', 'rtu'):
+                for policy in ('continuous', 'strict'):
+                    with self.subTest(operation=operation, transport=transport, policy=policy):
+                        result, observed = self.exercise(transport, points, 'zero-exception', policy)
+                        self.assertTrue(observed)
+                        self.assertTrue(all(address == 0 for _, address in observed))
+                        self.assertGreater(result['counters'].get('bad_reply', 0), 0)
+                        for counter in ('exception', 'exception_ambiguous', 'readback_skipped', 'read'):
+                            self.assertNotIn(counter, result['counters'])
+                        if transport == 'rtu':
+                            self.assertTrue(result['ack_correlation_uncertain'])
+                        self.assertEqual(result['exit_code'], 1 if policy == 'strict' else 0)
+                        if policy == 'strict':
+                            self.assertEqual(len(observed), 1)
 
     def test_fc06_merged_readback_is_skipped_if_any_dependency_was_rejected(self):
         points = [dict(operation='write-single', data_type='uint16', address=address,

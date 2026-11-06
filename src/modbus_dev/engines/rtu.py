@@ -154,6 +154,12 @@ class RtuEngine:
                     self.mark_uncertain("CRC rejected response candidate")
                     self._event("crc_rejected", "Response candidate failed CRC", "WARNING", hex=candidate.hex())
                     continue
+                # 与 TCP 一致：零异常码不是有效拒绝，不能据此放行后续请求。
+                if candidate[1] == request.function | 0x80 and candidate[2] == 0:
+                    self.mark_uncertain("Exception response has a zero exception code")
+                    self._event("reply_mismatch", "Exception response has a zero exception code",
+                                "WARNING", exception_code=0, hex=candidate.hex())
+                    continue
                 # 先校验线上长度，防止库忽略奇数载荷末尾字节后误报有效读取。
                 # 异常应答不含字节数字段，仍交由下方的异常 PDU 解码处理。
                 if candidate[1] in (3, 4):
