@@ -272,7 +272,16 @@ class SessionRunner:
                         if source is not None:
                             self._emit("source_sample", "Source values prepared", "DEBUG", "source", slot=slot, values=values)
                         try:
+                            # 明确拒绝的写入不再读回验证；独立请求仍共享原来的截止预算。
+                            rejected_writes = []
                             for request in requests:
+                                if request.function == 3 and request.registers and any(
+                                        request.address < end and start < request.address + request.count
+                                        for start, end in rejected_writes):
+                                    self.counters["readback_skipped"] += 1
+                                    self._emit("readback_skipped", "Readback depends on a rejected write", "WARNING",
+                                               "verification", slot=slot, address=request.address, count=request.count)
+                                    continue
                                 reply = self._transaction(request, decision.deadline_s, slot, decision.scheduled_s)
                                 if reply.status == "read" and request.registers and reply.registers != request.registers:
                                     self.counters["readback_mismatch"] += 1
@@ -281,12 +290,18 @@ class SessionRunner:
                                                expected=request.registers, actual=reply.registers)
                                     if self.config.policy == "strict":
                                         raise RuntimeError("Readback differs from source registers")
-                                    break
+                                    if reply.ambiguous:
+                                        break
                                 if reply.status not in ("ack", "read") or reply.ambiguous:
                                     if self.config.policy == "strict":
                                         raise RuntimeError(f"Strict replay transaction failed: {reply.status}; ambiguous={reply.ambiguous}")
-                                if reply.status not in ("ack", "read"):
-                                    # Do not add optional traffic after an unresolved request.
+                                # 完整且关联明确的异常应答已结束交易，不等于超时或交易未决。
+                                if reply.status == "exception" and not reply.ambiguous and not reply.outcome_unknown:
+                                    if request.function in (6, 16):
+                                        rejected_writes.append((request.address, request.address + request.count))
+                                elif reply.status not in ("ack", "read"):
+                                    break
+                                if not self.engine.connected:
                                     break
                         except (OSError, ValueError) as exc:
                             self.counters["io_errors"] += 1
