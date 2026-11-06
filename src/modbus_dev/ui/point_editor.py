@@ -50,9 +50,10 @@ class PointEditor(QWidget):
         self.form.setContentsMargins(0, 0, 0, 0)
         self.form.setHorizontalSpacing(METRICS.section_spacing)
         self.form.setVerticalSpacing(METRICS.spacing)
+        self.form.setLabelAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         self.form.setFieldGrowthPolicy(QFormLayout.AllNonFixedFieldsGrow)
-        # 最窄栏宽或较长译文放不下同行时，标签自动换到控件上方，不裁切输入区。
-        self.form.setRowWrapPolicy(QFormLayout.WrapLongRows)
+        # 配置栏已有最小宽度，所有输入始终留在右列，不按单行切换上下布局。
+        self.form.setRowWrapPolicy(QFormLayout.DontWrapRows)
         self.fields = {"name": QLineEdit(), "address": SpinBox(),
                        "data_type": ComboBox(), "byte_order": ContextComboBox(normalize=canonical_order),
                        "operation": ContextComboBox(), "area": ComboBox(), "readback_every": SpinBox(),
@@ -67,7 +68,6 @@ class PointEditor(QWidget):
         for order in ORDERS:
             self.fields["byte_order"].addItem(order.removeprefix("B"), order)
         bind(self.fields['byte_order'], 'setToolTip', tr('Only byte orders matching this type are shown. B12 is the default for 16-bit points.'))
-        bind(self.fields['byte_order'], 'setPlaceholderText', tr('Select a compatible byte order'))
         for operation in OPERATIONS:
             add_item(self.fields['operation'], CHOICE_LABELS[operation], operation)
         add_item(self.fields['area'], tr('Holding registers'), 'holding')
@@ -78,9 +78,8 @@ class PointEditor(QWidget):
         add_item(self.fields['source.kind'], tr('Constant'), 'constant')
         add_item(self.fields['source.kind'], tr('Sine wave'), 'sine')
         add_item(self.fields['source.kind'], tr('Triangle wave'), 'triangle')
-        bind(self.fields['source.kind'], 'setPlaceholderText', tr('Select a compatible data source'))
         for key, caption in (("name", tr('Name')), ("area", tr('Register area')), ("operation", tr('Operation')),
-                             ("readback_every", tr('Readback every N cycles')), ("address", tr('Start address')),
+                             ("readback_every", tr('Readback cycles')), ("address", tr('Start address')),
                              ("data_type", tr('Data type')), ("byte_order", tr('Byte order')), ("source.kind", tr('Data source')),
                              ("source.value", tr('Value')), ("source.amplitude", tr('Amplitude')),
                              ("source.frequency_hz", tr('Frequency (Hz)')), ("source.lower", tr('Lower bound')),
@@ -88,7 +87,10 @@ class PointEditor(QWidget):
             widget = self.fields[key]
             widget.setObjectName(f"points.{index}.{key}")
             bind(widget, 'setAccessibleName', tr('Point {p0} · {p1}').format(p0=index + 1, p1=caption))
-            self.form.addRow(label(caption), widget)
+            caption_widget = label(caption)
+            # 长译文可在左列内部折行，不撑宽滚动内容，也不移动右列输入框。
+            caption_widget.setWordWrap(True)
+            self.form.addRow(caption_widget, widget)
         layout.addWidget(self.body)
         self.source_note = label("", "caption")
         self.source_note.setWordWrap(True)
@@ -204,7 +206,7 @@ class PointEditor(QWidget):
         self._readonly = readonly
         self._source_tip = (tr('Generate values for the master to write to remote holding registers.') if usage.master else
                             tr('Input values follow the source; holding values initialize once.'))
-        caption = tr('Remote start address') if usage.master else tr('Local start address')
+        caption = tr('Start address') if usage.master else tr('Local start address')
         bind(self.form.labelForField(self.fields['address']), 'setText', caption)
         self._changed()
 

@@ -1,12 +1,15 @@
 """按上下文隐藏不适用的候选项，同时保留原始草稿供用户修正或切回。"""
 from PySide6.QtCore import QEvent, QSignalBlocker, Qt
 
+from .i18n import bind, tr
 from .widgets import ComboBox
 
 
 class ContextComboBox(ComboBox):
     def __init__(self, parent=None, *, normalize=lambda value: value, allow_unknown=False):
         super().__init__(parent)
+        # 共用短提示，避免未显示的长占位文案撑大最小宽度；完整原因由表单说明。
+        bind(self, 'setPlaceholderText', tr('Select'))
         self._normalize = normalize
         self._allow_unknown = allow_unknown
         self._draft_value = None

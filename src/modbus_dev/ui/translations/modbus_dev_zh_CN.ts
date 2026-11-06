@@ -519,8 +519,8 @@ Age: {p3:.3f} s</source>
       <translation>读写从站：本机数据源更新输入区，保持区初始化后保留主站写入值。</translation>
     </message>
     <message>
-      <source>Readback every N cycles</source>
-      <translation>写后读回间隔 / 周期</translation>
+      <source>Readback cycles</source>
+      <translation>写后读回间隔</translation>
     </message>
     <message>
       <source>Readback function</source>
@@ -1159,12 +1159,8 @@ The UI retains the latest 2000 lines; complete logs are saved to the results dir
       <translation>原数据源不适用于当前类型，请重新选择数据源。</translation>
     </message>
     <message>
-      <source>Select a compatible byte order</source>
-      <translation>请选择适用的字节序</translation>
-    </message>
-    <message>
-      <source>Select a compatible data source</source>
-      <translation>请选择适用的数据源</translation>
+      <source>Select</source>
+      <translation>请选择</translation>
     </message>
     <message>
       <source>Select a read operation</source>
@@ -1323,10 +1319,6 @@ Input: read with FC04; the source updates values continuously, unaffected by mas
     <message>
       <source>Register area</source>
       <translation>寄存器区</translation>
-    </message>
-    <message>
-      <source>Remote start address</source>
-      <translation>对端起始地址</translation>
     </message>
     <message>
       <source>Select an operation compatible with access and data width.</source>

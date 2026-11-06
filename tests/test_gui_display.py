@@ -74,6 +74,25 @@ window.close()
         self.assertEqual(result.returncode, 0, result.stderr)
 
     @unittest.skipUnless(sys.platform == "win32", "Requires the Windows native Qt platform")
+    def test_windows_native_two_column_point_forms_at_common_scales(self):
+        environment = clean_qt_environment()
+        environment['QT_QPA_PLATFORM'] = 'windows:fontengine=gdi'
+        probe = subprocess.run(
+            [sys.executable, '-c', 'from modbus_dev.gui import create_application; '
+             'app=create_application(language="zh_CN"); print(app.primaryScreen().devicePixelRatio())'],
+            cwd=PROJECT, env=environment, capture_output=True, text=True, timeout=30, check=True)
+        native_dpr = float(probe.stdout.strip())
+        for scale in sorted({1, 1.25, 1.5, 1.75, 2, native_dpr}):
+            with self.subTest(scale=scale):
+                # 每种倍率独立启动，使用真实 Windows 字体检查完整控件边界与草稿。
+                scaled_environment = dict(environment, QT_SCALE_FACTOR=str(scale / native_dpr))
+                result = subprocess.run(
+                    [sys.executable, '-m', 'unittest', 'discover', '-s', 'tests',
+                     '-p', 'test_point_form_layout.py', '-v'], cwd=PROJECT, env=scaled_environment,
+                    capture_output=True, text=True, timeout=60)
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    @unittest.skipUnless(sys.platform == "win32", "Requires the Windows native Qt platform")
     def test_windows_native_font_and_per_monitor_dpi_at_common_scales(self):
         environment = clean_qt_environment()
         probe = subprocess.run(
