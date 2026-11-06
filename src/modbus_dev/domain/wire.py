@@ -2,8 +2,9 @@
 from dataclasses import dataclass
 import math
 
+from .config import MIN_PERIOD_MS
+
 WORKFLOW_RESERVE_MS = 10
-MIN_CYCLE_MS = 20
 WARNING_MULTIPLIER = 1.2
 
 
@@ -33,7 +34,7 @@ def cycle_budget(config):
     character_ms = 1000 * config.serial.bits_per_character / config.serial.baud
     transaction_ms = total * character_ms + max(0, 2 * transactions - 1) * config.serial.gap_ms
     line_ms = transaction_ms + (config.serial.gap_ms if transactions else 0)
-    minimum = max(MIN_CYCLE_MS, math.ceil(round(line_ms + WORKFLOW_RESERVE_MS, 9)))
+    minimum = max(MIN_PERIOD_MS, math.ceil(round(line_ms + WORKFLOW_RESERVE_MS, 9)))
     return CycleBudget(transactions, total, transaction_ms, line_ms, minimum,
                        math.ceil(round(minimum * WARNING_MULTIPLIER, 9)))
 

@@ -182,4 +182,4 @@ TX 曲线保留实际完整提交驱动的值，确认状态单独显示；ACK �
 - [Windows x64 Cython 便携包实包验收](logs/validation/packaging-windows-20261023.md)
 - [M2 历史验证记录](logs/validation/validation-m2.md)
 
-逐点操作、独立区域、20ms 周期下限及红黄预算规则见 [独立测点与周期预算](docs/point-configuration.md)。新版示例：[八点主站](examples/rtu-master-independent-points.json)、[独立两区 TCP 从站](examples/tcp-independent-points.json)。
+逐点操作、独立区域、50ms 周期下限及红黄预算规则见 [独立测点与周期预算](docs/point-configuration.md)。新版示例：[八点主站](examples/rtu-master-independent-points.json)、[独立两区 TCP 从站](examples/tcp-independent-points.json)。

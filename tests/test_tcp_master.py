@@ -165,14 +165,14 @@ class TcpConfigurationTests(unittest.TestCase):
             configuration(access_mode="read-write", points=[dict(operation="write-single")])
 
     def test_tcp_budget_is_independent_of_serial_and_connection_timeout(self):
-        config = configuration(period_ms=20, timeout_ms=19, connect_timeout_ms=60000,
+        config = configuration(period_ms=50, timeout_ms=49, connect_timeout_ms=60000,
                                serial=dict(port="", baud="unused", parity="unused"))
-        self.assertEqual(config.period_ms, 20)
+        self.assertEqual(config.period_ms, 50)
         self.assertFalse(config.usage.serial)
         self.assertTrue(config.usage.field_active("connect_timeout_ms"))
         self.assertFalse(config.usage.field_active("serial.baud"))
         for options in (dict(timeout_ms=100), dict(timeout_ms=101), dict(connect_timeout_ms=0),
-                        dict(connect_timeout_ms=True), dict(connect_timeout_ms=60001), dict(period_ms=19),
+                        dict(connect_timeout_ms=True), dict(connect_timeout_ms=60001), dict(period_ms=49),
                         dict(access_mode=None)):
             with self.subTest(options=options), self.assertRaises(ConfigurationError):
                 configuration(**options)

@@ -92,7 +92,7 @@ class IndependentGuiTests(unittest.TestCase):
         self.configure_master()
         fields = self.window.fields
         fields['timeout_ms'].setText('10')
-        for period, tone, enabled in ((19, 'error', False), (20, 'warning', True), (23, 'warning', True), (24, 'idle', True)):
+        for period, tone, enabled in ((49, 'error', False), (50, 'warning', True), (59, 'warning', True), (60, 'idle', True)):
             with self.subTest(period=period):
                 fields['period_ms'].setText(str(period))
                 self.assertEqual(self.window.editor.budget_note.property('tone'), tone)
@@ -100,6 +100,25 @@ class IndependentGuiTests(unittest.TestCase):
         fields['serial.baud'].setEditText('1200')
         self.assertIn('210ms', self.window.editor.budget_note.text())
         self.assertFalse(self.window.start_button.isEnabled())
+
+    def test_all_roles_enforce_50ms_and_preserve_invalid_saved_drafts(self):
+        for mode in ('tcp-master', 'tcp-slave', 'rtu-master', 'rtu-slave'):
+            with self.subTest(mode=mode):
+                self.window.apply_config(TaskConfig.from_mapping(dict(mode=mode,
+                    period_ms=50, timeout_ms=40, serial=dict(port='TEST', baud=115200))))
+                field = self.window.fields['period_ms']
+                self.assertTrue(self.window.start_button.isEnabled())
+                self.assertIn('50', field.toolTip())
+                # 旧草稿可以展示，但不得静默改成 50ms 或在低周期下启动。
+                field.setText('40')
+                draft = self.window.editor.capture_draft()
+                self.window.editor.restore_draft(draft)
+                self.assertEqual(field.text(), '40')
+                self.assertFalse(self.window.start_button.isEnabled())
+                with self.assertRaises(ConfigurationError):
+                    self.window.configuration()
+                field.setText('50')
+                self.assertTrue(self.window.start_button.isEnabled())
 
     def test_request_count_tracks_contiguous_and_disjoint_points(self):
         self.window.apply_config(TaskConfig.from_mapping(dict(schema_version=4, mode='rtu-master',
@@ -179,7 +198,7 @@ class IndependentGuiTests(unittest.TestCase):
         for mode, english, chinese in (('rtu-master', 'Communication polling period (ms)', '通信轮询周期（ms）'),
                                         ('rtu-slave', 'Input register update period (ms)', '输入区数据更新周期（ms）')):
             self.window.apply_config(TaskConfig.from_mapping(dict(schema_version=4, mode=mode,
-                serial=dict(port='TEST', baud=1200), period_ms=300 if mode == 'rtu-master' else 20,
+                serial=dict(port='TEST', baud=1200), period_ms=300 if mode == 'rtu-master' else 50,
                 timeout_ms=200 if mode == 'rtu-master' else 80, points=[dict(area='input', operation='read-input')])) )
             before = self.window.editor.capture_draft()
             for language, caption in (('en', english), ('zh_CN', chinese)):

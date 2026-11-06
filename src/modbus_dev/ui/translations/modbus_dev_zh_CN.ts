@@ -1345,12 +1345,12 @@ Input: read with FC04; the source updates values continuously, unaffected by mas
       <translation>{points} 个测点 → 最忙周期 {requests} 笔请求。线路 {line:.3f}ms + 流程预留 10ms；最低 {minimum}ms，低于 {warning}ms 黄色预警。当前 {period}ms。</translation>
     </message>
     <message>
-      <source>20–60000 ms. All enabled input-register points share this local update period. It does not update holding registers or control how often the master reads.</source>
-      <translation>20～60000ms。所有启用的输入区测点共用本机更新周期；不更新保持区，也不决定主站读取频率。</translation>
+      <source>{minimum}–{maximum} ms. All enabled input-register points share this local update period. It does not update holding registers or control how often the master reads.</source>
+      <translation>{minimum}～{maximum}ms。所有启用的输入区测点共用本机更新周期；不更新保持区，也不决定主站读取频率。</translation>
     </message>
     <message>
-      <source>20–60000 ms. Executes one round of configured point reads and writes per cycle. The minimum depends on the actual requests and includes one 10 ms workflow reserve per cycle.</source>
-      <translation>20～60000ms。每个周期执行一轮已配置测点的读写；最低周期按实际请求计算，并包含每周期一次的 10ms 流程预留。</translation>
+      <source>{minimum}–{maximum} ms. Executes one round of configured point reads and writes per cycle. The minimum depends on the actual requests and includes one 10 ms workflow reserve per cycle.</source>
+      <translation>{minimum}～{maximum}ms。每个周期执行一轮已配置测点的读写；最低周期按实际请求计算，并包含每周期一次的 10ms 流程预留。</translation>
     </message>
     <message>
       <source>Communication polling period (ms)</source>
@@ -1393,8 +1393,8 @@ Input: read with FC04; the source updates values continuously, unaffected by mas
       <translation>1～60000ms。限制单次连接尝试，与整轮交易预算独立。</translation>
     </message>
     <message>
-      <source>20–60000 ms. All points share one polling cycle and one transaction budget. Network and device latency are not predicted from serial settings; expired cycles are not replayed.</source>
-      <translation>20～60000ms。所有测点共用轮询周期和整轮交易预算；不根据串口参数估算网络及设备耗时，过期周期不补发。</translation>
+      <source>{minimum}–{maximum} ms. All points share one polling cycle and one transaction budget. Network and device latency are not predicted from serial settings; expired cycles are not replayed.</source>
+      <translation>{minimum}～{maximum}ms。所有测点共用轮询周期和整轮交易预算；不根据串口参数估算网络及设备耗时，过期周期不补发。</translation>
     </message>
     <message>
       <source>All requests and readbacks share one deadline from the planned cycle time. The budget must be smaller than the polling period.</source>

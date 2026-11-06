@@ -1,5 +1,6 @@
 """将稳定的协议键映射为界面文案，供配置与监视组件共用。"""
 from .i18n import tr
+from ..domain.config import MIN_PERIOD_MS, MAX_PERIOD_MS
 CHOICE_LABELS = {
     "tcp-slave": tr('TCP slave'), "tcp-master": tr('TCP master'), "rtu-slave": tr('RTU slave'), "rtu-master": tr('RTU master'),
     "continuous": tr('Continuous'), "strict": tr('Strict'), "constant": tr('Constant'), "sine": tr('Sine wave'),
@@ -30,6 +31,6 @@ INPUT_AREA_HELP = tr('Input: the local source generates and updates values for t
 SLAVE_AREAS_HELP = (HOLDING_AREA_HELP + '\n' + INPUT_AREA_HELP + '\n'
                    + tr('Each point belongs to one register area. The two areas are independent, even at the same address.'))
 HOLDING_INITIAL_HELP = tr('Set only when the session starts. Later master writes are retained; the input register update period does not refresh this value.')
-INPUT_PERIOD_HELP = tr('20–60000 ms. All enabled input-register points share this local update period. It does not update holding registers or control how often the master reads.')
-MASTER_PERIOD_HELP = tr('20–60000 ms. Executes one round of configured point reads and writes per cycle. The minimum depends on the actual requests and includes one 10 ms workflow reserve per cycle.')
-TCP_MASTER_PERIOD_HELP = tr('20–60000 ms. All points share one polling cycle and one transaction budget. Network and device latency are not predicted from serial settings; expired cycles are not replayed.')
+INPUT_PERIOD_HELP = tr('{minimum}–{maximum} ms. All enabled input-register points share this local update period. It does not update holding registers or control how often the master reads.').format(minimum=MIN_PERIOD_MS, maximum=MAX_PERIOD_MS)
+MASTER_PERIOD_HELP = tr('{minimum}–{maximum} ms. Executes one round of configured point reads and writes per cycle. The minimum depends on the actual requests and includes one 10 ms workflow reserve per cycle.').format(minimum=MIN_PERIOD_MS, maximum=MAX_PERIOD_MS)
+TCP_MASTER_PERIOD_HELP = tr('{minimum}–{maximum} ms. All points share one polling cycle and one transaction budget. Network and device latency are not predicted from serial settings; expired cycles are not replayed.').format(minimum=MIN_PERIOD_MS, maximum=MAX_PERIOD_MS)

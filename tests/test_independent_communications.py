@@ -58,7 +58,7 @@ class IndependentCommunicationTests(unittest.TestCase):
 
     def test_native_tcp_holding_and_input_have_different_widths_and_values_at_the_same_address(self):
         config = TaskConfig.from_mapping(dict(schema_version=4, mode='tcp-slave', duration_s=0,
-            access_mode='read-write', period_ms=20, points=[dict(area='holding', data_type='uint16', source=dict(value=7)),
+            access_mode='read-write', period_ms=50, points=[dict(area='holding', data_type='uint16', source=dict(value=7)),
                                                         dict(area='input', source=dict(value=8.5))]))
         ready, stop = threading.Event(), threading.Event()
         engines, results = [], []

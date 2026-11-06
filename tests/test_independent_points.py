@@ -105,20 +105,20 @@ class IndependentPointTests(unittest.TestCase):
             self.assertEqual(budget.level(budget.warning_period_ms), 'idle')
 
     def test_period_floor_and_exact_single_point_boundaries(self):
-        for baud, minimum, warning in ((1200, 210, 252), (9600, 35, 42), (115200, 20, 24)):
+        for baud, minimum, warning in ((1200, 210, 252), (9600, 50, 60), (115200, 50, 60)):
             config = master([dict(operation='read-input')], period_ms=1000, timeout_ms=900)
             config = replace(config, serial=replace(config.serial, baud=baud))
             budget = cycle_budget(config)
             self.assertEqual((budget.minimum_period_ms, budget.warning_period_ms), (minimum, warning))
             with self.assertRaises(ConfigurationError):
                 replace(config, period_ms=minimum-1).validate()
-        for period in (19, 60001):
+        for period in (20, 40, 49, 60001):
             with self.assertRaises(ConfigurationError):
                 slave([{}], period_ms=period)
-        slave([{}], period_ms=20)
+        slave([{}], period_ms=50)
         slave([{}], period_ms=60000)
         # 流程预留属于整周期，不在每笔请求或内部预算中重复计入。
-        config = master([dict(operation='read-input')], period_ms=35, timeout_ms=30)
+        config = master([dict(operation='read-input')], period_ms=50, timeout_ms=30)
         config = replace(config, serial=replace(config.serial, baud=9600))
         config.validate()
 
@@ -127,7 +127,8 @@ class IndependentPointTests(unittest.TestCase):
         readback = master([dict(operation='write-multiple', readback_every=100)])
         self.assertEqual(cycle_budget(plain).transactions, 1)
         self.assertEqual(cycle_budget(readback).transactions, 2)
-        self.assertGreater(cycle_budget(readback).minimum_period_ms, cycle_budget(plain).minimum_period_ms)
+        self.assertGreater(cycle_budget(readback).transaction_ms, cycle_budget(plain).transaction_ms)
+        self.assertEqual(cycle_budget(readback).minimum_period_ms, 50)
 
     def test_bank_publication_does_not_create_unconfigured_mirrors(self):
         config = slave([dict(area='input')])

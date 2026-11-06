@@ -12,7 +12,8 @@ from .numeric import NUMERIC_TYPES, canonical_order, encode_value, numeric_type,
 
 MAX_POINTS = 8
 CONFIG_VERSION = 4
-MIN_PERIOD_MS = 20
+# 四种通信角色共用周期硬下限；RTU 主站还须满足线路预算。
+MIN_PERIOD_MS = 50
 MAX_PERIOD_MS = 60000
 # 预留槽位沿用 float32 的默认间距，实际占用由每点类型决定。
 REGISTERS_PER_POINT = NUMERIC_TYPES["float32"].registers
