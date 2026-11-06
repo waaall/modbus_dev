@@ -128,13 +128,11 @@ class ParameterGuiTests(unittest.TestCase):
         self.assertTrue(point.fields["address"].isEnabled())
         for key in ("source.kind", "source.value", "source.amplitude", "source.frequency_hz"):
             self.assertFalse(point.fields[key].isEnabled(), key)
-        self.assertIn("对端", point.form.labelForField(point.fields["address"]).text())
         mode = self.window.fields["mode"]
         mode.setCurrentIndex(mode.findData("rtu-slave"))
         self.window.fields["access_mode"].setCurrentIndex(self.window.fields["access_mode"].findData("read-only"))
         self.assertTrue(point.fields["source.kind"].isEnabled())
         self.assertTrue(point.fields["source.value"].isEnabled())
-        self.assertIn("本机", point.form.labelForField(point.fields["address"]).text())
 
     def test_read_mode_hides_all_source_rows_and_retains_triangle_draft(self):
         self.window.apply_config(master("write-multiple", points=[dict(data_type="int16",

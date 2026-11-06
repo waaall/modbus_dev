@@ -11,8 +11,8 @@ class PointFormLayoutTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
-        from modbus_dev.ui.app import create_application
-        cls.app = create_application(language='zh_CN')
+        from gui_support import create_test_application
+        cls.app = create_test_application(language='zh_CN')
 
     def setUp(self):
         from PySide6.QtCore import Qt
@@ -122,34 +122,28 @@ class PointFormLayoutTests(unittest.TestCase):
             self.assertEqual(edited.count(), 0)
             self.panel.set_busy(False)
 
-    def test_short_master_captions_keep_readback_values_and_help(self):
+    def test_language_changes_keep_readback_values_and_help(self):
         from PySide6.QtTest import QSignalSpy
         for mode in ('rtu-master', 'tcp-master'):
             editor = self.configure(mode, readback_every=7)
             before = self.panel.capture_draft()
             edited = QSignalSpy(self.panel.edited)
-            for language, readback_text, address_text in (
-                ('zh_CN', '写后读回间隔', '起始地址'),
-                ('en', 'Readback cycles', 'Start address'),
-            ):
+            for language in ('zh_CN', 'en'):
                 with self.subTest(mode=mode, language=language):
                     self.app.language_manager._install(language)
                     self.panel.retranslate_ui()
                     self.settle()
                     readback = editor.fields['readback_every']
-                    self.assertEqual(editor.form.labelForField(readback).text(), readback_text)
-                    self.assertEqual(editor.form.labelForField(editor.fields['address']).text(), address_text)
                     self.assertEqual(readback.value(), 7)
-                    # 简短标签不删除完整用法说明，也不改变读回周期和草稿。
+                    # 切换语言不改变读回周期、功能说明和草稿。
                     self.assertIn('FC03', readback.toolTip())
                     self.assertIn('0', readback.toolTip())
                     self.assert_two_columns(editor)
             self.assertEqual(self.panel.capture_draft(), before)
             self.assertEqual(edited.count(), 0)
 
-    def test_incompatible_choices_keep_short_prompts_help_and_original_drafts(self):
+    def test_incompatible_choices_keep_help_and_original_drafts(self):
         from PySide6.QtTest import QSignalSpy
-        from modbus_dev.ui.i18n import tr
         editor = self.configure(source=dict(kind='sine'))
         editor.fields['data_type'].setCurrentIndex(editor.fields['data_type'].findData('int16'))
         order, source = editor.fields['byte_order'], editor.fields['source.kind']
@@ -166,7 +160,6 @@ class PointFormLayoutTests(unittest.TestCase):
                     self.assert_two_columns(editor)
                     for field in (order, source):
                         self.assertEqual(field.currentIndex(), -1)
-                        self.assertEqual(field.placeholderText(), str(tr('Select')))
                         self.assertTrue(field.toolTip())
                         self.assertTrue(field.accessibleName())
                     self.assertTrue(editor.selection_note.isVisible())

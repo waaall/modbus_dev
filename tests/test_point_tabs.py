@@ -11,8 +11,8 @@ class PointTabsTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
-        from modbus_dev.gui import create_application
-        cls.app = create_application(language='zh_CN')
+        from gui_support import create_test_application
+        cls.app = create_test_application(language='zh_CN')
 
     def setUp(self):
         from modbus_dev.gui import Workbench
