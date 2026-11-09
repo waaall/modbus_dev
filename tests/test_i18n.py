@@ -217,7 +217,7 @@ class TranslationTests(unittest.TestCase):
         w = self.window
         w.apply_config(TaskConfig.from_mapping(dict(schema_version=4, mode="rtu-slave", serial=dict(port="TEST"),
             points=[dict(area="holding"), dict(area="input")])))
-        now = time.monotonic()
+        now = time.perf_counter()
         rows = [dict(key=f"{area}:{identity-1}:tx", point=identity-1, name="测点 1", area=area, address=0, direction="tx",
                      sampled_s=now, quality="submitted", value=2.5, registers=[0x4020, 0],
                      function=function, sample_id=identity)

@@ -123,9 +123,10 @@ class TrendPlot(QWidget):
 
 
 class RealtimePanel(QWidget):
-    def __init__(self, clock=time.monotonic):
+    def __init__(self, clock=None):
         super().__init__()
-        self.clock = clock
+        # 必须与通信层 Control.now() 使用同一时间基准；Windows 上两种单调时钟可能有偏差。
+        self.clock = time.perf_counter if clock is None else clock
         self.config = None
         self.snapshot = {}
         self.pending = None

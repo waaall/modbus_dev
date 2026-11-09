@@ -115,6 +115,12 @@ class TcpMasterGuiTests(unittest.TestCase):
                           and bool(self.window.live_panel.snapshot.get("rows")))
             self.assertFalse(self.window.editor.isEnabled())
             self.assertTrue(self.window.live_panel.snapshot["rows"])
+            panel = self.window.live_panel
+            self.window.monitor_tabs.setCurrentIndex(1)
+            self.wait_for(lambda: any(panel.clock() - 1. <= at <= panel.clock()
+                                     for at, value in panel.history.series.get("input:0:rx", ())
+                                     if value is not None), timeout=1.5)
+            self.assertLess(abs(panel.clock() - panel.snapshot["rows"][0]["sampled_s"]), 1.)
             self.window.stop()
             self.wait_for(lambda: not self.window.active())
             self.assertEqual(self.window.result["exit_code"], 130)
@@ -125,7 +131,7 @@ class TcpMasterGuiTests(unittest.TestCase):
     def test_unknown_write_remains_visible_after_stop(self):
         self.window.apply_config(configuration(access_mode="read-write", points=[
             dict(operation="write-single", data_type="uint16")]), persist=False)
-        now = time.monotonic()
+        now = time.perf_counter()
         row = dict(key="holding:0:tx", point=0, name="", area="holding", address=0, direction="tx",
                    value=3, registers=[3], function=6, quality="submitted", confirmation="outcome-unknown",
                    sampled_s=now, sample_id=1)

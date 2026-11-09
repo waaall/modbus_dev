@@ -9,6 +9,63 @@ import unittest
 
 @unittest.skipUnless(importlib.util.find_spec("PySide6"), "需要可选 Qt 依赖")
 class LiveGuiTests(unittest.TestCase):
+    def test_backend_samples_render_and_expire_when_clock_epochs_differ(self):
+        script = '''
+from unittest.mock import patch
+from PySide6.QtGui import QImage, QPainter
+from modbus_dev.ui.app import create_application
+from modbus_dev.application.control import Control
+from modbus_dev.application.live import LiveValues
+from modbus_dev.domain.config import TaskConfig
+from modbus_dev.domain.events import Event
+app = create_application(language="zh_CN")
+# Windows Python can give monotonic and perf_counter different epochs.
+with patch('time.monotonic') as uptime, patch('time.perf_counter') as communication_clock:
+    from modbus_dev.ui import realtime_panel
+    dots = []
+    class RecordingPainter(QPainter):
+        def drawEllipse(self, rect):
+            dots.append(rect)
+            return super().drawEllipse(rect)
+    realtime_panel.QPainter = RecordingPainter
+    for offset in (-12.5, 12.5):
+        uptime.return_value = 100. + offset
+        communication_clock.return_value = 100.
+        panel = realtime_panel.RealtimePanel()
+        config = TaskConfig.from_mapping(dict(mode='rtu-master', access_mode='read-only',
+            serial=dict(port='TEST'), duration_s=0,
+            points=[dict(operation='read-holding', data_type='uint16')]))
+        panel.configure(config)
+        live = LiveValues(config)
+        sampled = Control().now()
+        live.consume(Event('register_values', 'RX', 'DEBUG', details=dict(area='holding', direction='rx',
+            address=0, registers=[65535], function=3, sampled_s=sampled, quality='received')))
+        panel.ingest(live.snapshot(sampled, 'running', drain=True))
+        panel.refresh_values()
+        assert panel.table.item(0, 3).text() == '65535'
+        assert panel.table.item(0, 5).text() == '已接收', (offset, panel.table.item(0, 5).text())
+        panel.plot.setFixedSize(600, 220)
+        image = QImage(panel.plot.size(), QImage.Format_ARGB32)
+        dots.clear()
+        panel.plot.render(image)
+        assert any(image.rect().contains(rect.center().toPoint()) for rect in dots), (
+            'Fresh received sample was not visible', offset, panel.clock(), sampled, dots)
+        assert abs(panel.clock() - sampled) < .001
+        # Age and stale detection must use the same epoch as the plotted sample.
+        communication_clock.return_value = 101.5
+        uptime.return_value = 101.5 + offset
+        panel.refresh_values()
+        assert '过期' in panel.table.item(0, 5).text()
+        panel.history.advance(panel.clock(), 'running', 1.)
+        assert panel.history.series['holding:0:rx'][-1][1] is None
+        panel.set_state('stopped')
+        panel.close()
+'''
+        environment = dict(os.environ, QT_QPA_PLATFORM="offscreen")
+        result = subprocess.run([sys.executable, "-c", script], cwd=Path(__file__).resolve().parents[1],
+                                env=environment, capture_output=True, text=True, timeout=30)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_trend_axis_labels_fit_and_preserve_integer_values_at_common_scales(self):
         script = '''
 import os
@@ -85,7 +142,7 @@ assert '包含关联不确定' in window.metric_values[1].toolTip()
 assert window.last_counters['ack'] == 12
 assert window.last_counters['ack_ambiguous'] == 87
 panel = window.live_panel
-now = time.monotonic()
+now = time.perf_counter()
 live = LiveValues(config)
 live.consume(Event('register_values', 'TX', 'DEBUG', details=dict(area='holding', direction='tx',
     address=0, registers=[0x3fa0, 0], function=16, sampled_s=now, quality='submitted')))
@@ -140,7 +197,7 @@ draws = []
 panel.plot.timer.timeout.connect(lambda: draws.append(time.monotonic()))
 def publish():
     global sequence
-    now = time.monotonic()
+    now = time.perf_counter()
     samples = []
     for at in (now - .1, now):
         sequence += 1
@@ -194,7 +251,7 @@ assert window.configuration().point_usage(window.configuration().points[0]).oper
 operation = window.point_editors[0].fields['operation']
 assert not operation.model().item(operation.findData('write-single')).isEnabled()
 panel = window.live_panel
-now = time.monotonic()
+now = time.perf_counter()
 row = dict(key='input:0:rx', point=0, name='压力', area='input', address=0,
     direction='rx', value=1.25, registers=[0x3fa0, 0], function=4,
     quality='received', sampled_s=now)
