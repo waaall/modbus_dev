@@ -1,6 +1,7 @@
 """轻量实时数值与趋势组件：数值 5Hz，曲线 2Hz，隐藏时停止曲线定时器。"""
 from .i18n import tr, bind, table_item, retranslate_tree
 from datetime import datetime, timedelta
+import sys
 import time
 
 from PySide6.QtCore import QTimer, Qt, QRectF, QPointF
@@ -23,6 +24,7 @@ CONFIRMATION_NAMES = {"confirmed": tr('Valid ACK received'), "ambiguous": tr('Va
                       "timeout": tr('Reply timeout'), "exception": tr('Exception reply'), "bad_reply": tr('Invalid / incomplete reply'),
                       "late_reply": tr('Late reply'), "outcome-unknown": tr('Write outcome unknown'),
                       "connection_lost": tr('TCP connection lost')}
+MAPPING_WARNINGS = {"invalid": tr('Mapped value unavailable'), "overflow": tr('Linear transform overflow')}
 
 
 class TrendPlot(QWidget):
@@ -69,11 +71,16 @@ class TrendPlot(QWidget):
                    if self.owner.selected(key)}
         values = [value for points in visible.values() for at, value in points
                   if now - CURVE_WINDOW_S <= at <= now and value is not None]
-        low, high = (min(values), max(values)) if values else (-1., 1.)
-        padding = max((high - low) * .1, abs(high) * .02, .001)
-        low, high = low - padding, high + padding
+        # 映射量程可超过 float32，先归一化再计算纵轴，避免有限值跨度或留白溢出。
+        scale = max(1., max((abs(value) for value in values), default=1.))
+        low, high = (min(values) / scale, max(values) / scale) if values else (-1., 1.)
+        padding = max((high - low) * .1, abs(high) * .02, .001 / scale)
+        limit = sys.float_info.max / scale
+        low, high = max(-limit, low - padding), min(limit, high + padding)
         # 保留常见 16/32 位整数的十进制刻度；极大/极小值仍可使用科学计数法。
-        labels = [f"{high - (high - low) * index / 4:.10g}" for index in range(5)]
+        ticks = [(high - (high - low) * index / 4) * scale for index in range(5)]
+        # 除以比例后再相乘可能因舍入越过 double 上限，仅约束坐标标签而不截断采样值。
+        labels = [f"{max(-sys.float_info.max, min(sys.float_info.max, tick)):.10g}" for tick in ticks]
         metrics = painter.fontMetrics()
         label_width = max(48, max(max(metrics.horizontalAdvance(text), metrics.boundingRect(text).width())
                                   for text in labels) + 2)
@@ -108,7 +115,7 @@ class TrendPlot(QWidget):
                     connected = False
                     continue
                 x = bounds.right() - (now - at) / CURVE_WINDOW_S * bounds.width()
-                y = bounds.bottom() - (value - low) / (high - low) * bounds.height()
+                y = bounds.bottom() - (value / scale - low) / (high - low) * bounds.height()
                 if connected:
                     path.lineTo(x, y)
                 else:
@@ -151,16 +158,16 @@ class RealtimePanel(QWidget):
         self.correlation_note.setWordWrap(True)
         self.correlation_note.hide()
         layout.addWidget(self.correlation_note)
-        self.table = QTableWidget(0, 6)
+        self.table = QTableWidget(0, 8)
         self.table.setObjectName("liveValues")
         bind(self.table, 'setAccessibleName', tr('Actual transmitted and received values'))
-        bind(self.table, 'setHorizontalHeaderLabels', [tr('Point / area'), tr('Address'), tr('TX value'), tr('RX value'), tr('Last update'), tr('Status')])
+        bind(self.table, 'setHorizontalHeaderLabels', [tr('Point / area'), tr('Address'),
+             tr('TX raw'), tr('TX mapped'), tr('RX raw'), tr('RX mapped'), tr('Last update'), tr('Status')])
         self.table.setEditTriggers(QTableWidget.NoEditTriggers)
         self.table.verticalHeader().hide()
         self.table.setShowGrid(False)
         self.table.verticalHeader().setDefaultSectionSize(30)
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
-        self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
         self.table.setMinimumHeight(84)
         self.table.setMaximumHeight(168)
         layout.addWidget(self.table)
@@ -180,7 +187,7 @@ class RealtimePanel(QWidget):
         self.update_curve_note()
 
     def update_curve_note(self):
-        text = tr('TX solid: submitted to driver · RX dashed: decoded values · Actual communication samples, redrawn at {p0} Hz').format(p0=CURVE_REFRESH_HZ)
+        text = tr('TX solid · RX dashed · Mapped values when enabled, otherwise raw · Actual communication samples, redrawn at {p0} Hz').format(p0=CURVE_REFRESH_HZ)
         if self.history.dropped:
             text += tr(' · Buffer dropped {p0} records').format(p0=self.history.dropped)
         bind(self.curve_note, 'setText', text)
@@ -211,13 +218,19 @@ class RealtimePanel(QWidget):
                 key = f"{area}:{index}:{direction}"
                 checkbox = CheckBox(tr("{name} · {area} · {direction}").format(
                     name=point.name or tr("Point {p0}").format(p0=index + 1),
-                    area=AREA_NAMES[area], direction=direction.upper()))
+                    area=AREA_NAMES[area], direction=direction.upper())
+                    + (tr(' · Mapped') if point.linear_transform.enabled else ''))
                 checkbox.setChecked(True)
                 color, _ = self.series_style(key)
                 checkbox.setStyleSheet(f"color: {color};")
                 checkbox.toggled.connect(lambda _: self.plot.update())
                 self.legend.addWidget(checkbox, len(self.selectors) // 2, len(self.selectors) % 2)
                 self.selectors[key] = checkbox
+        # 不展示本会话没有的通信方向，为原始/映射双值及异常状态保留可读宽度。
+        directions = {key.rsplit(":", 1)[-1] for key in self.selectors}
+        for direction, columns in (("tx", (2, 3)), ("rx", (4, 5))):
+            for column in columns:
+                self.table.setColumnHidden(column, direction not in directions)
         self.set_state("idle")
 
     def retranslate_ui(self):
@@ -266,7 +279,6 @@ class RealtimePanel(QWidget):
         for row in self.snapshot.get("rows", []):
             grouped.setdefault((row["point"], row["area"]), {})[row["direction"]] = row
         self.table.setRowCount(len(grouped))
-        self.table.setFixedHeight(max(84, self.table.horizontalHeader().height() + min(4, len(grouped)) * 30 + 4))
         now = self.clock()
         for index, (_, directions) in enumerate(sorted(grouped.items())):
             last = max(directions.values(), key=lambda row: row["sampled_s"])
@@ -278,22 +290,35 @@ class RealtimePanel(QWidget):
                 # 失效只说明数值不再新鲜，不能抹去可能已执行的写入风险。
                 if last.get("confirmation") == "outcome-unknown":
                     quality += " · " + tr('Write outcome unknown')
+            # 换算警告与通信状态分开，不能因另一个方向更新或停止而丢失超量程信息。
+            for direction, row in sorted(directions.items()):
+                warning = self.mapping_warning(row)
+                if warning:
+                    quality += tr(' · {direction}: {warning}').format(direction=direction.upper(), warning=warning)
             name = last["name"]
             if self.config is not None:
                 name = self.config.points[last["point"]].name or tr("Point {p0}").format(p0=last["point"] + 1)
             values = [tr("{name} · {area}").format(name=name, area=AREA_NAMES[last["area"]]), str(last["address"]),
-                      self.format_value(directions.get("tx")), self.format_value(directions.get("rx")),
+                      self.format_value(directions.get("tx")), self.format_mapped_value(directions.get("tx")),
+                      self.format_value(directions.get("rx")), self.format_mapped_value(directions.get("rx")),
                       (datetime.now() - timedelta(seconds=age)).strftime("%H:%M:%S.%f")[:-3], quality]
             for column, value in enumerate(values):
                 item = table_item(value)
-                if column in (2, 3):
-                    row = directions.get("tx" if column == 2 else "rx")
+                if column in (2, 3, 4, 5):
+                    row = directions.get("tx" if column in (2, 3) else "rx")
                     if row:
                         bind(item, 'setToolTip', tr('FC{p0:02d} · {p1}\nRaw registers: {p2}\nAge: {p3:.3f} s').format(p0=row['function'], p1=self.describe_row(row), p2=' '.join((f'{word:04X}' for word in row['registers'])), p3=max(0, now - row['sampled_s']))
                              + "\n" + row.get("data_type", "float32") + " · " + row.get("byte_order", ""))
                         if now - row["sampled_s"] > self.snapshot.get("stale_after_s", 1.) or stale:
                             item.setForeground(QColor(COLORS["muted"]))
+                        elif column in (3, 5) and self.mapping_warning(row):
+                            item.setForeground(QColor(COLORS["warning"]))
                 self.table.setItem(index, column, item)
+        # 双值列增多后允许横向滚动，不压缩测点身份；为滚动条留出高度以免遮挡数据行。
+        header = self.table.horizontalHeader()
+        scroll_height = (self.table.horizontalScrollBar().sizeHint().height()
+                         if header.length() > self.table.viewport().width() else 0)
+        self.table.setFixedHeight(max(84, header.height() + min(4, len(grouped)) * 30 + scroll_height + 4))
 
     @staticmethod
     def describe_row(row):
@@ -302,6 +327,20 @@ class RealtimePanel(QWidget):
         if confirmation is not None:
             text += " · " + CONFIRMATION_NAMES.get(confirmation, confirmation)
         return text
+
+    @staticmethod
+    def mapping_warning(row):
+        warning = MAPPING_WARNINGS.get(row.get("mapping_status"), '')
+        if row.get("mapping_out_of_range"):
+            outside = tr('Outside raw range')
+            warning = outside + (' · ' + warning if warning else '')
+        return warning
+
+    @staticmethod
+    def format_mapped_value(row):
+        if row is None or row.get("mapped_value") is None:
+            return "—"
+        return f"{row['mapped_value']:.7g}"
 
     @staticmethod
     def format_value(row):

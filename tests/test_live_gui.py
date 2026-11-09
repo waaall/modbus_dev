@@ -42,8 +42,8 @@ with patch('time.monotonic') as uptime, patch('time.perf_counter') as communicat
             address=0, registers=[65535], function=3, sampled_s=sampled, quality='received')))
         panel.ingest(live.snapshot(sampled, 'running', drain=True))
         panel.refresh_values()
-        assert panel.table.item(0, 3).text() == '65535'
-        assert panel.table.item(0, 5).text() == '已接收', (offset, panel.table.item(0, 5).text())
+        assert panel.table.item(0, 4).text() == '65535'
+        assert panel.table.item(0, 7).text() == '已接收', (offset, panel.table.item(0, 7).text())
         panel.plot.setFixedSize(600, 220)
         image = QImage(panel.plot.size(), QImage.Format_ARGB32)
         dots.clear()
@@ -55,7 +55,7 @@ with patch('time.monotonic') as uptime, patch('time.perf_counter') as communicat
         communication_clock.return_value = 101.5
         uptime.return_value = 101.5 + offset
         panel.refresh_values()
-        assert '过期' in panel.table.item(0, 5).text()
+        assert '过期' in panel.table.item(0, 7).text()
         panel.history.advance(panel.clock(), 'running', 1.)
         assert panel.history.series['holding:0:rx'][-1][1] is None
         panel.set_state('stopped')
@@ -153,7 +153,7 @@ snapshot['ack_correlation_uncertain'] = True
 panel.ingest(snapshot)
 panel.refresh_values()
 assert panel.table.item(0, 2).text() == '1.25'
-assert '已提交发送' in panel.table.item(0, 5).text()
+assert '已提交发送' in panel.table.item(0, 7).text()
 assert '关联不确定' in panel.table.item(0, 2).toolTip()
 assert list(panel.history.series['holding:0:tx']) == [(now, 1.25)]
 assert panel.correlation_note.isVisible()
@@ -162,12 +162,12 @@ live.consume(Event('register_confirmation', 'timeout', 'DEBUG', details=dict(are
     address=0, count=2, sampled_s=now, quality='timeout')))
 panel.ingest(live.snapshot(now + .1, 'running', drain=True))
 panel.refresh_values()
-assert '应答超时' in panel.table.item(0, 5).text()
+assert '应答超时' in panel.table.item(0, 7).text()
 assert list(panel.history.series['holding:0:tx']) == [(now, 1.25)]
 assert panel.correlation_note.isVisible()
 panel.set_state('stopped')
 assert not panel.value_timer.isActive()
-assert '停止' in panel.table.item(0, 5).text()
+assert '停止' in panel.table.item(0, 7).text()
 panel.configure(config)
 assert not panel.correlation_note.isVisible()
 assert not panel.correlation_uncertain
@@ -260,7 +260,7 @@ assert panel.value_timer.interval() == 200
 assert panel.plot.timer.interval() == 500
 panel.refresh_values()
 assert panel.table.item(0, 2).text() == '—'
-assert panel.table.item(0, 3).text() == '1.25'
+assert panel.table.item(0, 4).text() == '1.25'
 assert not panel.plot.timer.isActive()
 window.monitor_tabs.setCurrentIndex(1)
 app.processEvents()
@@ -272,9 +272,9 @@ assert not panel.selected('input:0:rx')
 row['quality'] = 'ambiguous'
 panel.ingest(dict(state='running', sampled_s=now, stale_after_s=1., rows=[row]))
 panel.refresh_values()
-assert panel.table.item(0, 3).text() == '1.25'
-assert panel.table.item(0, 5).text() == '应答关联不确定'
-assert '应答关联不确定' in panel.table.item(0, 3).toolTip()
+assert panel.table.item(0, 4).text() == '1.25'
+assert panel.table.item(0, 7).text() == '应答关联不确定'
+assert '应答关联不确定' in panel.table.item(0, 4).toolTip()
 panel.plot.tick()
 assert panel.history.series['input:0:rx'][-1][1] is None
 window.monitor_tabs.setCurrentIndex(0)
@@ -282,8 +282,8 @@ app.processEvents()
 assert not panel.plot.timer.isActive()
 panel.set_state('stopped')
 assert not panel.value_timer.isActive()
-assert '停止' in panel.table.item(0, 5).text()
-assert panel.table.item(0, 3).text() == '1.25'
+assert '停止' in panel.table.item(0, 7).text()
+assert panel.table.item(0, 4).text() == '1.25'
 window.close()
 '''
         environment = dict(os.environ, QT_QPA_PLATFORM="offscreen")

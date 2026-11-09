@@ -152,6 +152,39 @@ class SourceConfig:
                 text(channel, path + ".channels")
 
 
+LINEAR_TRANSFORM_FIELDS = ("raw_start", "raw_end", "mapped_start", "mapped_end")
+
+
+@dataclass(frozen=True)
+class LinearTransformConfig:
+    """逐点显示量程，不参与寄存器编码或数据源生成；关闭时保留草稿。"""
+    enabled: bool = False
+    raw_start: float = 0.0
+    raw_end: float = 1.0
+    mapped_start: float = 0.0
+    mapped_end: float = 1.0
+
+    @classmethod
+    def from_mapping(cls, data, path):
+        return cls(**section(data, path, cls.__dataclass_fields__))
+
+    def validate(self, path):
+        if not isinstance(self.enabled, bool):
+            fail(path + ".enabled", "must be a boolean")
+        if not self.enabled:
+            return
+        for key in LINEAR_TRANSFORM_FIELDS:
+            value = getattr(self, key)
+            try:
+                finite = type(value) in (int, float) and math.isfinite(value)
+            except OverflowError:
+                finite = False
+            if not finite:
+                fail(path + "." + key, "must be a finite number", reason="transform_finite")
+        if self.raw_end <= self.raw_start:
+            fail(path + ".raw_end", "raw end must exceed raw start", reason="transform_bounds")
+
+
 @dataclass(frozen=True)
 class PointConfig:
     """逐点保存类型、排列、地址和数据源；禁用点不占用通信地址。"""
@@ -164,6 +197,7 @@ class PointConfig:
     area: str = "input"
     operation: str = "write-multiple"
     readback_every: int = 0
+    linear_transform: LinearTransformConfig = field(default_factory=LinearTransformConfig)
 
     def __post_init__(self):
         object.__setattr__(self, "byte_order", canonical_order(self.byte_order))
@@ -183,6 +217,8 @@ class PointConfig:
             data["byte_order"] = resolve_order(data_type)
         data["source"] = SourceConfig.from_mapping(data.get("source", {}), path + ".source",
                                                  active=source_used and data.get("enabled", True) is True)
+        data["linear_transform"] = LinearTransformConfig.from_mapping(
+            data.get("linear_transform", {}), path + ".linear_transform")
         return cls(**data)
 
     def validate(self, period_ms, path, *, source_used=True, default_order="B1234"):
@@ -198,6 +234,7 @@ class PointConfig:
         self.encoding_order(default_order)
         number(self.address, path + ".address", 0, 65536 - self.register_count, True)
         self.source.validate(period_ms, path=path + ".source", active=source_used, data_type=self.data_type)
+        self.linear_transform.validate(path + ".linear_transform")
 
 
 def default_point(index):

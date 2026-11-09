@@ -1432,5 +1432,77 @@ Input: read with FC04; the source updates values continuously, unaffected by mas
       <source>Write outcome unknown</source>
       <translation>写入结果未知</translation>
     </message>
+    <message>
+      <source> · Mapped</source>
+      <translation> · 映射值</translation>
+    </message>
+    <message>
+      <source> · {direction}: {warning}</source>
+      <translation> · {direction}：{warning}</translation>
+    </message>
+    <message>
+      <source>Display conversion only; register reads, writes and source values remain unchanged. Stop the session before editing.</source>
+      <translation>仅用于显示换算，不改变寄存器读写和数据源数值；停止会话后才能修改。</translation>
+    </message>
+    <message>
+      <source>Enter a finite number for the linear transform.</source>
+      <translation>线性变换端点必须为有限数值。</translation>
+    </message>
+    <message>
+      <source>Linear transform</source>
+      <translation>线性变换</translation>
+    </message>
+    <message>
+      <source>Linear transform overflow</source>
+      <translation>线性变换溢出</translation>
+    </message>
+    <message>
+      <source>Mapped range end</source>
+      <translation>映射量程终点</translation>
+    </message>
+    <message>
+      <source>Mapped range start</source>
+      <translation>映射量程起点</translation>
+    </message>
+    <message>
+      <source>Mapped value unavailable</source>
+      <translation>映射值无效</translation>
+    </message>
+    <message>
+      <source>Outside raw range</source>
+      <translation>超出原始量程</translation>
+    </message>
+    <message>
+      <source>RX mapped</source>
+      <translation>RX 映射值</translation>
+    </message>
+    <message>
+      <source>RX raw</source>
+      <translation>RX 原始值</translation>
+    </message>
+    <message>
+      <source>Raw range end</source>
+      <translation>原始量程终点</translation>
+    </message>
+    <message>
+      <source>Raw range start</source>
+      <translation>原始量程起点</translation>
+    </message>
+    <message>
+      <source>TX mapped</source>
+      <translation>TX 映射值</translation>
+    </message>
+    <message>
+      <source>TX raw</source>
+      <translation>TX 原始值</translation>
+    </message>
+    <message>
+      <source>TX solid · RX dashed · Mapped values when enabled, otherwise raw · Actual communication samples, redrawn at {p0} Hz</source>
+      <translation>TX 实线 · RX 虚线 · 启用变换时显示映射值，否则显示原始值 · 实际通信点，{p0}Hz 重绘</translation>
+    </message>
+    <message>
+      <source>The raw range end must be greater than its start.</source>
+      <translation>原始量程终点必须大于起点。</translation>
+    </message>
   </context>
 </TS>

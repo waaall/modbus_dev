@@ -81,6 +81,8 @@ class PointFormLayoutTests(unittest.TestCase):
         from PySide6.QtTest import QSignalSpy
         # 覆盖最长读回标签、纯读取隐藏源、从站独立区域及全部数值类型。
         cases = (
+            dict(data_type='uint16', linear_transform=dict(enabled=True,
+                raw_start=0, raw_end=65536, mapped_start=255, mapped_end=-255)),
             dict(data_type='float32', source=dict(kind='sine'), readback_every=1),
             dict(data_type='int16', source=dict(kind='constant')),
             dict(data_type='uint16', source=dict(kind='triangle')),

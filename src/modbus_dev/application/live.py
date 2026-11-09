@@ -1,9 +1,10 @@
-"""最新数值与有界通信点缓冲，不记录发送计划或源计划值。"""
+"""保留原始解码数值并缓存显示量程趋势，不记录发送计划或源计划值。"""
 from collections import deque
 from itertools import islice
 import threading
 
 from ..domain.numeric import decode_value
+from ..domain.linear_transform import transform_value
 from ..domain.live_policy import CURVE_WINDOW_S, LIVE_BATCH_MAX_SAMPLES, LIVE_SAMPLE_CAPACITY
 
 
@@ -31,7 +32,7 @@ class LiveValues:
         if len(self.samples) == self.capacity:
             self.samples.popleft()
             self.dropped += 1
-        self.samples.append([row["sample_id"], row["key"], row["sampled_s"], row["value"], row["quality"]])
+        self.samples.append([row["sample_id"], row["key"], row["sampled_s"], row["trend_value"], row["quality"]])
 
     def consume(self, event):
         if event.code not in ("register_values", "register_confirmation"):
@@ -65,11 +66,15 @@ class LiveValues:
                 quality = data.get("quality", "received") if complete else "partial"
                 if complete and value is None:
                     quality = "nonfinite"
+                mapped = transform_value(value, point.linear_transform)
                 self.sequence += 1
                 self.rows[key] = dict(key=key, sample_id=self.sequence, point=index, name=point.name or f"测点 {index + 1}",
                                      area=data["area"], address=point.address, direction=data["direction"],
                                      data_type=point.data_type, byte_order=point.encoding_order(),
-                                     value=value, registers=list(raw), function=data["function"],
+                                     value=value, mapped_value=mapped.value, mapping_status=mapped.status,
+                                     mapping_out_of_range=mapped.out_of_range,
+                                     trend_value=mapped.value if point.linear_transform.enabled else value,
+                                     registers=list(raw), function=data["function"],
                                      quality=quality, confirmation=None,
                                      sampled_s=data["sampled_s"])
                 self._enqueue(self.rows[key])

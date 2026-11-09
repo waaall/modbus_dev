@@ -41,7 +41,7 @@ class TrendHistory:
         if samples is None:
             # 兼容只带最新值的状态包；相同时间戳不会重复生成点。
             samples = [(row.get("sample_id", row["sampled_s"]), row["key"],
-                        row["sampled_s"], row["value"], row["quality"])
+                        row["sampled_s"], row.get("trend_value", row["value"]), row["quality"])
                        for row in snapshot.get("rows", [])]
         stale_after = snapshot.get("stale_after_s", 1.)
         for identity, key, at, value, quality in samples:

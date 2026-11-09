@@ -19,6 +19,8 @@ TEMPLATES = {
     "config_version": tr("Incompatible configuration version. Only version {current} is supported; recreate the configuration."),
     "integer_source": tr("Integer points support constant and triangle sources only."),
     "triangle_bounds": tr("The upper bound must be greater than the lower bound."),
+    "transform_finite": tr("Enter a finite number for the linear transform."),
+    "transform_bounds": tr("The raw range end must be greater than its start."),
     "integer_value": tr("Enter an integral value; integer points do not round fractional values."),
     "point_count": tr("Provide 1 to {maximum} point configurations."),
     "readonly_write": tr("A read-only master cannot perform writes."),

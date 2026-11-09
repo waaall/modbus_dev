@@ -7,7 +7,7 @@ from PySide6.QtWidgets import (
     QFormLayout, QHBoxLayout, QLineEdit, QVBoxLayout, QWidget,
 )
 
-from ..domain.config import PointConfig, SOURCE_FIELDS
+from ..domain.config import LINEAR_TRANSFORM_FIELDS, PointConfig, SOURCE_FIELDS
 from ..domain.usage import ParameterUsage
 from ..domain.operations import OPERATIONS
 from .texts import CHOICE_LABELS, HOLDING_AREA_HELP, INPUT_AREA_HELP, SLAVE_AREAS_HELP, HOLDING_INITIAL_HELP
@@ -16,6 +16,11 @@ from .context_choices import ContextComboBox
 from .errors import format_error
 from .theme import METRICS
 from .widgets import CheckBox, ComboBox, SpinBox, label, refresh_style
+
+TRANSFORM_LABELS = {
+    "raw_start": tr('Raw range start'), "raw_end": tr('Raw range end'),
+    "mapped_start": tr('Mapped range start'), "mapped_end": tr('Mapped range end'),
+}
 
 
 class PointEditor(QWidget):
@@ -60,6 +65,11 @@ class PointEditor(QWidget):
                        "source.kind": ContextComboBox(allow_unknown=True),
                        "source.value": QLineEdit(), "source.amplitude": QLineEdit(),
                        "source.frequency_hz": QLineEdit(), "source.lower": QLineEdit(), "source.upper": QLineEdit()}
+        self.fields["linear_transform.enabled"] = CheckBox(tr('Enable'))
+        self.fields["linear_transform.enabled"].setFixedHeight(METRICS.control_height)
+        self.fields.update({"linear_transform." + key: QLineEdit() for key in LINEAR_TRANSFORM_FIELDS})
+        bind(self.fields['linear_transform.enabled'], 'setToolTip',
+             tr('Display conversion only; register reads, writes and source values remain unchanged. Stop the session before editing.'))
         bind(self.fields['name'], 'setPlaceholderText', tr('Optional, e.g. temperature or pressure'))
         self.fields["address"].setRange(0, 65535)
         bind(self.fields['address'], 'setToolTip', tr('Zero-based register address; the selected data type determines register width.'))
@@ -83,7 +93,9 @@ class PointEditor(QWidget):
                              ("data_type", tr('Data type')), ("byte_order", tr('Byte order')), ("source.kind", tr('Data source')),
                              ("source.value", tr('Value')), ("source.amplitude", tr('Amplitude')),
                              ("source.frequency_hz", tr('Frequency (Hz)')), ("source.lower", tr('Lower bound')),
-                             ("source.upper", tr('Upper bound'))):
+                             ("source.upper", tr('Upper bound')),
+                             ("linear_transform.enabled", tr('Linear transform')),
+                             *(("linear_transform." + key, caption) for key, caption in TRANSFORM_LABELS.items())):
             widget = self.fields[key]
             widget.setObjectName(f"points.{index}.{key}")
             bind(widget, 'setAccessibleName', tr('Point {p0} · {p1}').format(p0=index + 1, p1=caption))
@@ -100,6 +112,7 @@ class PointEditor(QWidget):
         self.selection_note.setProperty("tone", "error")
         layout.addWidget(self.selection_note)
         self.enabled.toggled.connect(self._changed)
+        self.fields["linear_transform.enabled"].toggled.connect(self._changed)
         self.fields["operation"].currentIndexChanged.connect(self._changed)
         self.fields["area"].currentIndexChanged.connect(self._changed)
         self.fields["readback_every"].valueChanged.connect(self._changed)
@@ -109,6 +122,8 @@ class PointEditor(QWidget):
         self.fields["byte_order"].currentIndexChanged.connect(self._changed)
         for key in ("name", "source.value", "source.amplitude", "source.frequency_hz", "source.lower", "source.upper"):
             self.fields[key].textChanged.connect(self._changed)
+        for key in LINEAR_TRANSFORM_FIELDS:
+            self.fields["linear_transform." + key].textChanged.connect(self._changed)
 
     def _changed(self, *_):
         if self._loading:
@@ -137,6 +152,11 @@ class PointEditor(QWidget):
         source_kind.filter_values(tuple(key for key in SOURCE_FIELDS if key != "sine" or not specification.integer))
         # 禁用仅锁定参数，不隐藏内容；页签切换由外层容器负责，启用开关始终可操作。
         self.body.setEnabled(active)
+        transform_enabled = self.fields["linear_transform.enabled"].isChecked()
+        for key in LINEAR_TRANSFORM_FIELDS:
+            field = self.fields["linear_transform." + key]
+            field.setEnabled(transform_enabled)
+            self.form.labelForField(field).setEnabled(transform_enabled)
         kind = source_kind.currentData()
         sine = kind == "sine"
         holding = not self._usage.master and self.fields['area'].currentData() == 'holding'
@@ -243,6 +263,9 @@ class PointEditor(QWidget):
             kind.set_draft_value(point.source.kind)
             for key in ("value", "amplitude", "frequency_hz", "lower", "upper"):
                 bind(self.fields['source.' + key], 'setText', str(getattr(point.source, key)))
+            self.fields["linear_transform.enabled"].setChecked(point.linear_transform.enabled)
+            for key in LINEAR_TRANSFORM_FIELDS:
+                bind(self.fields['linear_transform.' + key], 'setText', str(getattr(point.linear_transform, key)))
         finally:
             self._loading = False
         self._changed()
@@ -268,6 +291,19 @@ class PointEditor(QWidget):
         data['operation'] = self.fields['operation'].draft_value()
         data['area'] = ('input' if data['operation'] == 'read-input' else 'holding') if self._usage.master else self.fields['area'].currentData()
         data['readback_every'] = self.fields['readback_every'].value()
+        transform = data["linear_transform"]
+        transform["enabled"] = self.fields["linear_transform.enabled"].isChecked()
+        for key, caption in TRANSFORM_LABELS.items():
+            draft = self.fields["linear_transform." + key].text().strip()
+            if not active or not transform["enabled"]:
+                if draft != str(transform[key]):
+                    transform[key] = draft
+                continue
+            try:
+                transform[key] = float(draft)
+            except ValueError:
+                raise ValueError(tr('Point {p0} · {p1}: enter a valid number').format(
+                    p0=self.index + 1, p1=caption)) from None
         if active and not self._usage.master and data['area'] == 'holding':
             kind = 'constant'
         data["source"]["kind"] = kind

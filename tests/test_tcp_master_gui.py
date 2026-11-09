@@ -138,7 +138,7 @@ class TcpMasterGuiTests(unittest.TestCase):
         panel = self.window.live_panel
         panel.ingest(dict(state="stopped", rows=[row], stale_after_s=1))
         panel.refresh_values()
-        self.assertIn("Write outcome unknown", panel.table.item(0, 5).text())
+        self.assertIn("Write outcome unknown", panel.table.item(0, 7).text())
 
     def test_target_and_connection_timeout_remain_reachable_on_compact_screen(self):
         editor = self.window.editor
