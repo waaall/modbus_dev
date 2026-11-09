@@ -63,7 +63,6 @@ class TrendPlot(QWidget):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
         painter.fillRect(self.rect(), QColor(COLORS["panel"]))
-        bounds = QRectF(62, 16, max(10, self.width() - 82), max(10, self.height() - 50))
         painter.setPen(QPen(QColor(COLORS["line"]), 1))
         now = self.owner.clock()
         visible = {key: points for key, points in self.owner.history.series.items()
@@ -73,17 +72,31 @@ class TrendPlot(QWidget):
         low, high = (min(values), max(values)) if values else (-1., 1.)
         padding = max((high - low) * .1, abs(high) * .02, .001)
         low, high = low - padding, high + padding
-        for index in range(5):
+        # 保留常见 16/32 位整数的十进制刻度；极大/极小值仍可使用科学计数法。
+        labels = [f"{high - (high - low) * index / 4:.10g}" for index in range(5)]
+        metrics = painter.fontMetrics()
+        label_width = max(48, max(max(metrics.horizontalAdvance(text), metrics.boundingRect(text).width())
+                                  for text in labels) + 2)
+        label_height = metrics.height() + 4
+        # 按实际字体与标签宽度预留空间，避免负号、指数或高 DPI 字体被左边界裁切。
+        left = 6 + label_width + 8
+        top = max(16, label_height / 2 + 2)
+        bottom = label_height + 12
+        bounds = QRectF(left, top, max(10, self.width() - left - 20),
+                        max(10, self.height() - top - bottom))
+        for index, text in enumerate(labels):
             y = bounds.top() + bounds.height() * index / 4
             painter.setPen(QPen(QColor(COLORS["line"]), 1))
             painter.drawLine(QPointF(bounds.left(), y), QPointF(bounds.right(), y))
             painter.setPen(QColor(COLORS["muted"]))
-            painter.drawText(QRectF(0, y - 10, 55, 20), Qt.AlignRight | Qt.AlignVCenter,
-                             f"{high - (high - low) * index / 4:.4g}")
+            painter.drawText(QRectF(6, y - label_height / 2, label_width, label_height),
+                             Qt.AlignRight | Qt.AlignVCenter, text)
         for index in range(6):
             x = bounds.left() + bounds.width() * index / 5
-            painter.drawText(QRectF(x - 20, bounds.bottom() + 8, 40, 22), Qt.AlignCenter,
-                             f"{-(CURVE_WINDOW_S - index * 2):g}s")
+            text = f"{-(CURVE_WINDOW_S - index * 2):g}s"
+            width = metrics.horizontalAdvance(text) + 4
+            painter.drawText(QRectF(x - width / 2, bounds.bottom() + 8, width, label_height),
+                             Qt.AlignCenter, text)
         painter.save()
         painter.setClipRect(bounds)
         for key, points in visible.items():

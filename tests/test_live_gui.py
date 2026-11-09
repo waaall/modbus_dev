@@ -9,6 +9,61 @@ import unittest
 
 @unittest.skipUnless(importlib.util.find_spec("PySide6"), "需要可选 Qt 依赖")
 class LiveGuiTests(unittest.TestCase):
+    def test_trend_axis_labels_fit_and_preserve_integer_values_at_common_scales(self):
+        script = '''
+import os
+from pathlib import Path
+from PySide6.QtCore import QRectF
+from PySide6.QtGui import QFont, QFontDatabase, QImage, QPainter
+from modbus_dev.gui import create_application
+from modbus_dev.domain.config import TaskConfig
+from modbus_dev.ui import realtime_panel
+app = create_application(language="zh_CN")
+fonts = Path(os.environ.get('WINDIR', 'C:/Windows')) / 'Fonts'
+if (fonts / 'segoeui.ttf').is_file():
+    QFontDatabase.addApplicationFont(str(fonts / 'segoeui.ttf'))
+drawn = []
+class RecordingPainter(QPainter):
+    def drawText(self, rect, flags, text):
+        drawn.append((text, self.boundingRect(rect, flags, text)))
+        return super().drawText(rect, flags, text)
+realtime_panel.QPainter = RecordingPainter
+panel = realtime_panel.RealtimePanel(clock=lambda: 100.)
+panel.configure(TaskConfig.from_mapping(dict(mode='rtu-master', access_mode='read-only',
+    serial=dict(port='TEST'), points=[dict(operation='read-holding', data_type='uint16')], duration_s=0)))
+plot = panel.plot
+for pixels in (14, 22):
+    font = QFont('Segoe UI')
+    font.setPixelSize(pixels)
+    plot.setFont(font)
+    plot.setStyleSheet(f'font-size: {pixels}px;')
+    for width in (430, 900):
+        plot.setFixedSize(width, 220)
+        for value in (65535, 4294967295, -2147483648, 3.4e38, 1.2e-20):
+            panel.history.clear()
+            panel.ingest(dict(state='running', stale_after_s=1., samples=[
+                [1, 'holding:0:rx', 100., value, 'received']]))
+            drawn.clear()
+            image = QImage(plot.size(), QImage.Format_ARGB32)
+            image.fill(0)
+            plot.render(image)
+            assert len(drawn) == 11, drawn
+            viewport = QRectF(plot.rect())
+            for text, ink in drawn:
+                assert viewport.contains(ink), (pixels, width, value, text, ink, viewport)
+            if value == 65535:
+                assert drawn[2][0] == '65535', drawn[:5]
+                assert all('e' not in text.lower() for text, _ in drawn[:5]), drawn[:5]
+panel.set_state('stopped')
+panel.close()
+'''
+        for scale in ("1", "1.5", "2"):
+            with self.subTest(scale=scale):
+                environment = dict(os.environ, QT_QPA_PLATFORM="offscreen", QT_SCALE_FACTOR=scale)
+                result = subprocess.run([sys.executable, "-c", script], cwd=Path(__file__).resolve().parents[1],
+                                        env=environment, capture_output=True, text=True, timeout=30)
+                self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_valid_ack_metrics_and_tx_history_are_independent_of_correlation(self):
         script = '''
 import time
