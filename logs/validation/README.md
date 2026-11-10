@@ -5,6 +5,7 @@
 ## 记录索引
 
 - [阶段实施记录](../implementation.md)
+- [2026-11-10 麒麟虚拟机原生构建与实包验收](kylin-vm-20261110.md)
 - [2026-11-01 TCP 主站源码与双窗口配套验证](tcp-master-20261101.md)
 - [2026-10-28 发布流程修复与 Windows 实包验收](release-fixes-windows-20261028.md)
 - [2026-10-27 通用数值类型源码验证](numeric-types-20261027.md)

@@ -8,7 +8,7 @@
 |---|---|---|
 | `macos-arm64` | macOS / Apple Silicon | 本机实际构建及解压验收 |
 | `windows-x64` | Windows / x64 | 已在 Windows 11 原生构建及解压验收 |
-| `kylin-x86_64` | 麒麟 / x86_64 | 构建适配，交由麒麟电脑实测 |
+| `kylin-x86_64` | 麒麟 / x86_64 | 麒麟本机原生构建，目标设备单独验收 |
 
 不能在 Mac 上生成 Windows 或麒麟可运行包，不把跨平台 spec 单元测试当实包通过。
 macOS 的最低版本、Intel Mac、麒麟其他版本或架构均不由本机验收推导。麒麟应在计划支持的
@@ -98,7 +98,11 @@ $cli = '已解压目录/ModbusDev/modbus-dev.exe'
 
 `--cli` 不与 `--gui-only` 混用；后者通过源码 GUI 驱动工作进程，不能作为发布版 GUI 验收。
 
-### 麒麟 x86_64（待原生实测）
+### 麒麟 x86_64
+
+在麒麟电脑或虚拟机中直接 clone 本仓库，后续通过 `git pull` 更新。
+准备独立 Python 和编译环境后，在已登录的麒麟桌面终端运行统一发布入口；
+详细环境准备见[麒麟本机打包](kylin-packaging.md)。
 
 ```sh
 python3.12 -m venv .venv-build-kylin-x86_64
@@ -106,7 +110,7 @@ python3.12 -m venv .venv-build-kylin-x86_64
 .venv-build-kylin-x86_64/bin/python build_release.py --target kylin-x86_64
 ```
 
-本轮不安装驱动、修改串口权限或防火墙，不替代真实设备验收。
+打包流程的隔离 PTY 验收不替代真实设备与物理串口验收。
 
 ## 发布门禁及证据
 

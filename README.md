@@ -26,8 +26,8 @@ TCP 主站支持同样的逐点 FC03/04/06/16、数据源、写后读回与监�
 一个会话连接一个目标 IP/端口/Unit ID，整轮共用交易预算，连接超时独立设置。
 本机配套分别运行两个窗口/进程，不在同一会话同时运行主从站；使用方法见[TCP 主站联调](docs/user-manual.md#tcp-主从站本机配套)。
 PySide6 单会话 GUI 已实现配置编辑/加载/保存、启动/停止、状态、计数、日志预览和结果目录。
-**macOS arm64 已完成 Cython 目录式便携包及本机实包验收；Windows x64 / 麒麟 x86_64
-仅有构建适配，待对应电脑验收。DYN/CSV 离线输入继续暂缓。validate 只校验配置，不代表功能已可运行。**
+**提供 macOS arm64、Windows x64、麒麟 x86_64 的原生目录式便携包构建入口。
+DYN/CSV 离线输入继续暂缓。validate 只校验配置，不代表功能已可运行。**
 
 ```sh
 python -m pip install -e .
@@ -52,7 +52,7 @@ python -m modbus_dev gui
 # 安装后也可使用桌面入口：modbus-dev-gui
 ```
 
-GUI 依赖可选，锁定 PySide6 6.7.2；普通 CLI 安装不需要 Qt。
+GUI 依赖可选，使用 PySide6 `>=6.9.3,<7`；发布构建锁定 6.9.3，普通 CLI 安装不需要 Qt。
 界面采用统一浅色主题、分组配置标签页、关键计数和日志/详细统计工作区，配色和尺寸统一在
 `src/modbus_dev/ui/theme.py` 管理。Windows 使用 GDI 字体后端、中文字体回退及完整字体像素对齐；
 由 Qt 处理逐显示器 DPI 与分数缩放，窗口按可用桌面调整大小，小屏保留滚动操作。
@@ -67,7 +67,6 @@ GUI 依赖可选，锁定 PySide6 6.7.2；普通 CLI 安装不需要 Qt。
 每点独立配置类型和排列，不再继承全局编码，数据周期共用；地址采用数字框，不再输入逗号列表。
 同一区域内启用点的寄存器范围重叠会即时提示，至少启用一个点才能启动。
 RTU 主站按各测点独立选择的操作执行通信，纯读取不先发送写入。任务文件仅支持 schema_version=4，其他版本或无版本文件提示不兼容，不自动改写。
-此改动目前仅在源码中生效，已有 `dist/` 便携包未重新构建。
 多测点配置示例见 [`examples/tcp-four-points.json`](examples/tcp-four-points.json)，
 可直接在 GUI 中加载；其中前三点分别为常量、正弦、另一常量，第四点为禁用的预留配置。
 结果父目录下每次创建独立时间戳目录，运行期间禁止修改配置；停止后可以修改并再次启动。
@@ -78,9 +77,6 @@ RTU 主站按各测点独立选择的操作执行通信，纯读取不先发送�
 “其他设置 → 日志保留”可配置分片数量，默认最多 100 片（包含当前文件），每片不超过 32 MiB。
 超限删除最旧分片；历史淘汰、日志队列丢失和界面预览丢失分别展示，不把滚动窗口宣称为完整会话证据。
 界面预览丢失与原始日志丢失分别计数。最终性能统计保存在 summary.json，并显示于结束日志。
-此前 Windows GUI 阶段 87 项测试通过，验证原生高 DPI/字体、Qt 离屏渲染、工作进程和本机 TCP 读数；
-覆盖 100%～200% 及当时 300% 缩放；该轮属于源码验证，Windows 发布包验收见下文，跨显示器拖动和麒麟桌面仍待验收。
-最新 macOS 便携包状态见下节，GUI 虚拟串口联调结果见通信验证记录。
 
 开发基线 Python 3.10+；锁定 PyModbus 3.11.4 和 pySerial 3.5，CLI 不需要 Qt。
 此前 Windows / 麒麟源码验证的具体 Python、Qt 版本见对应归档；未在系统 Python 3.7 上运行新包。
@@ -104,24 +100,23 @@ RTU 从站按权限响应四种寄存器操作；合法广播写入执行但不�
 
 ## 目录式便携包
 
-macOS arm64、Windows x64 已生成无需安装 Python 的目录式便携包，产物在 `dist/`。
+macOS arm64、Windows x64、麒麟 x86_64 支持无需安装 Python 的目录式便携包，产物在 `dist/`。
 macOS 完整解压 `.tar.gz` 后打开 `ModbusDev.app`，CLI 为
 `ModbusDev.app/Contents/MacOS/modbus-dev`；Windows 完整解压 `.zip` 后打开 `ModbusDev/ModbusDev.exe`，
-CLI 为相邻的 `modbus-dev.exe`。两个入口共享包内运行时，GUI 经独立 CLI worker 通信。
+CLI 为相邻的 `modbus-dev.exe`。麒麟完整解压 `.tar.gz` 后在 `ModbusDev/` 内运行 `./ModbusDev`，
+CLI 为相邻的 `./modbus-dev`。两个入口共享包内运行时，GUI 经独立 CLI worker 通信。
 GUI 的结果和启动诊断默认写入用户数据目录，不修改应用包。
 
-所有 26 个应用模块经 Cython 编译。源码与编译后各收集 114 项回归，均通过 113 项、跳过
-1 项 Windows 专属测试；实际归档解压后验证 TCP、隔离 PTY RTU 主从站、停止与异常恢复，
-GUI 覆盖原生 Cocoa、离屏和 LaunchServices 应用包启动。Windows 源码及编译后各通过 112 项、
-跳过 2 项 POSIX 专属测试；实际解压包通过双入口、TCP、原生/离屏 GUI 和 100%～200% DPI 验收。
-发布版 CLI/worker 另经用户指定的 HHD COM11/COM12 验证 RTU 主从站、写入读回和串口占用恢复。
-麒麟发布包尚未实测。macOS 当前仅使用 ad-hoc 签名，未做 Developer ID 签名和公证；Windows 未签名。
-本机验收不等于已完成异机外部分发验收。
+应用模块经 Cython 编译，发布流程分别运行源码和编译后回归，并对实际解压包执行双入口、GUI 和通信验收。
+麒麟在 V10 SP3 2403 x86_64、glibc 2.28 系统中 clone 仓库并使用统一入口原生构建；目标设备仍需单独验收。
+macOS 当前仅使用 ad-hoc 签名，未做 Developer ID 签名和公证；Windows 未签名。
 
 - [构建步骤、入口与平台验收边界](docs/packaging.md)
+- [麒麟本机打包：环境准备与构建命令](docs/kylin-packaging.md)
 - [便携版使用说明](docs/portable-quickstart.md)
 - [本轮 macOS 实包验收记录](logs/validation/packaging-macos-20261023.md)
 - [本轮 Windows 实包验收记录](logs/validation/packaging-windows-20261023.md)
+- [麒麟虚拟机实包验收记录](logs/validation/kylin-vm-20261110.md)
 
 ## 运行结果
 
