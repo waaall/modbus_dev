@@ -64,6 +64,11 @@ class LiveValues:
                     except ValueError:
                         pass
                 quality = data.get("quality", "received") if complete else "partial"
+                if complete and "expected_registers" in data:
+                    # 按整点占用的寄存器比对；匹配也不能消除原应答的关联风险。
+                    expected = data["expected_registers"][point.address - start:point_stop - start]
+                    if raw == tuple(expected):
+                        quality = data["matched_quality"]
                 if complete and value is None:
                     quality = "nonfinite"
                 mapped = transform_value(value, point.linear_transform)

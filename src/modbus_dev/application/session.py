@@ -149,8 +149,6 @@ class SessionRunner:
             self.current_request = None
         if reply.status == "read":
             quality = "ambiguous" if reply.ambiguous else "received"
-            if request.registers and reply.registers != request.registers:
-                quality = "readback-mismatch"
             self._value_event(request, reply.registers, "rx", reply.received_s,
                               quality)
         elif request.function in (6, 16) and reply.sent_s is not None:
@@ -182,10 +180,16 @@ class SessionRunner:
         return reply
 
     def _value_event(self, request, registers, direction, sampled_s, quality):
+        verification = {}
+        if direction == "rx" and request.registers and registers != request.registers:
+            # 保留整笔事件的失配标记，同时让实时层区分匹配点和应答关联风险。
+            verification = dict(expected_registers=request.registers, matched_quality=quality)
+            quality = "readback-mismatch"
         event = Event("register_values", "实际寄存器数值", "DEBUG", "communication",
                       dict(area="input" if request.function == 4 else "holding", direction=direction,
                            address=request.address, registers=registers, function=request.function,
-                           sampled_s=self.control.now() if sampled_s is None else sampled_s, quality=quality))
+                           sampled_s=self.control.now() if sampled_s is None else sampled_s, quality=quality,
+                           **verification))
         self.live.consume(event)
         self.journal.emit(event)
 

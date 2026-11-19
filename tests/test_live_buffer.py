@@ -3,10 +3,13 @@ import json
 import struct
 from types import SimpleNamespace
 import unittest
+from unittest.mock import Mock
 
 from modbus_dev.application.live import LiveValues
+from modbus_dev.application.session import SessionRunner
 from modbus_dev.domain.config import TaskConfig
 from modbus_dev.domain.events import Event
+from modbus_dev.domain.transactions import Reply, Request
 from modbus_dev.domain.live_policy import CURVE_MAX_POINTS, LIVE_BATCH_MAX_SAMPLES
 from modbus_dev.domain.trend import TrendHistory
 from modbus_dev.worker import live_packets
@@ -24,6 +27,30 @@ def value_event(at, value, *, direction="tx"):
 
 
 class BufferedLiveTests(unittest.TestCase):
+    def test_merged_readback_keeps_independent_point_quality_and_trend(self):
+        config = TaskConfig.from_mapping(dict(mode="tcp-master", access_mode="read-write", points=[
+            dict(operation="write-multiple", address=10, data_type="uint16"),
+            dict(operation="write-multiple", address=11, data_type="uint32")]))
+        request = Request(3, 10, 3, (7, 0, 8))
+        for ambiguous in (False, True):
+            with self.subTest(ambiguous=ambiguous):
+                runner = SessionRunner(config, ".", control=SimpleNamespace(now=lambda: 1.))
+                runner.engine, runner.journal = Mock(), Mock()
+                # 先给两个点建立有效趋势，再只改变第二个点的低字。
+                runner.engine.exchange.side_effect = [
+                    Reply("read", request.registers, received_s=0.),
+                    Reply("read", (7, 0, 9), received_s=.1, ambiguous=ambiguous)]
+                for slot in range(2):
+                    runner._transaction(request, 1., slot, slot / 10)
+                snapshot = runner.live.snapshot(.1, "running", drain=True)
+                self.assertEqual([r["quality"] for r in snapshot["rows"]],
+                                 ["ambiguous" if ambiguous else "received", "readback-mismatch"])
+                history = TrendHistory()
+                history.sample(snapshot, .1)
+                self.assertEqual(list(history.series["holding:0:rx"]),
+                                 [(0., 7), (.1, None if ambiguous else 7)])
+                self.assertEqual(list(history.series["holding:1:rx"]), [(0., 8), (.1, None)])
+
     def test_ten_hz_points_keep_original_times_and_survive_latest_value_replacement(self):
         live, history = LiveValues(settings()), TrendHistory()
         for batch in range(50):
