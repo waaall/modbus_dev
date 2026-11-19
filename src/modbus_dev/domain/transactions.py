@@ -26,6 +26,8 @@ class Reply:
     detail: str = ""
     exception_code: int | None = None
     outcome_unknown: bool = False
+    # 超时前是否已完整提交请求；发送尝试时间本身不能证明已提交。
+    submitted_before_timeout: bool = False
 
 
 class StopRequested(Exception):

@@ -14,7 +14,7 @@ from test_tcp_master import BytePeer, Clock, adu
 
 
 class MasterFaultIsolationTests(unittest.TestCase):
-    def exercise(self, transport, points, failure='exception', policy='continuous'):
+    def exercise(self, transport, points, failure='exception', policy='continuous', duration=.3):
         """独立字节对端只让首地址失败，其余请求始终正常应答。"""
         clock = Clock() if transport == 'tcp' else FakeControl()
         observed = []
@@ -23,7 +23,7 @@ class MasterFaultIsolationTests(unittest.TestCase):
             pdu = packet[7:] if transport == 'tcp' else packet[1:-2]
             function, address, count = struct.unpack('>BHH', pdu[:5])
             observed.append((function, address))
-            if address == 0 and failure == 'timeout':
+            if address == 0 and (failure == 'timeout' or failure == 'timeout-once' and len(observed) == 1):
                 return []
             if address == 0 and failure in ('exception', 'ambiguous-exception', 'zero-exception'):
                 response = bytes((function | 0x80, 0 if failure == 'zero-exception' else 2))
@@ -34,7 +34,7 @@ class MasterFaultIsolationTests(unittest.TestCase):
                 response = bytes((function, count * 2)) + struct.pack('>' + 'H' * count, *([value] * count))
             encoded = (adu(int.from_bytes(packet[:2], 'big'), response)
                        if transport == 'tcp' else frame(bytes((packet[0],)) + response))
-            return [(.002, encoded)]
+            return [(.078 if failure == 'slow-first' and len(observed) == 1 else .002, encoded)]
 
         peer = BytePeer(clock, respond) if transport == 'tcp' else ResponsePeer(clock, respond)
         def factory(config, control, emit):
@@ -44,7 +44,7 @@ class MasterFaultIsolationTests(unittest.TestCase):
             engine.uncertain = failure == 'ambiguous-exception'
             return engine
         config = TaskConfig.from_mapping(dict(mode=transport + '-master', policy=policy,
-            access_mode='read-write', duration_s=.3, serial=dict(port='TEST', baud=115200), points=points))
+            access_mode='read-write', duration_s=duration, serial=dict(port='TEST', baud=115200), points=points))
         with tempfile.TemporaryDirectory() as root:
             runner = SessionRunner(config, Path(root) / 'run', control=clock, engine_factory=factory)
             result = runner.run()
@@ -86,13 +86,39 @@ class MasterFaultIsolationTests(unittest.TestCase):
     def test_strict_exception_and_timeout_still_stop_the_round(self):
         points = [dict(operation='read-input', data_type='uint16', address=address) for address in (0, 4)]
         for transport in ('tcp', 'rtu'):
-            for failure, policy in (('exception', 'strict'), ('timeout', 'continuous')):
+            for failure, policy in (('exception', 'strict'), ('timeout', 'strict')):
                 with self.subTest(transport=transport, failure=failure):
                     result, observed = self.exercise(transport, points, failure, policy)
                     self.assertNotIn((4, 4), observed)
-                    if policy == 'strict':
-                        self.assertEqual(result['exit_code'], 1)
-                        self.assertEqual(len(observed), 1)
+                    self.assertEqual(result['exit_code'], 1)
+                    self.assertEqual(len(observed), 1)
+
+    def test_read_timeout_rotates_across_available_cycles(self):
+        points = [dict(operation='read-input', data_type='uint16', address=a) for a in (0, 4)]
+        for transport in ('tcp', 'rtu'):
+            for failure in ('timeout', 'timeout-once'):
+                with self.subTest(transport=transport, failure=failure):
+                    result, observed = self.exercise(transport, points, failure, duration=2.5)
+                    # 观察真实请求顺序；TCP 重连等待期间不消耗轮换起点。
+                    addresses = [address for _, address in observed]
+                    self.assertEqual(result['exit_code'], 0)
+                    self.assertGreaterEqual(len(addresses), 5)
+                    self.assertEqual(addresses[:5], [0, 4, 0, 4, 0] if failure == 'timeout'
+                                     else [0, 4, 0, 0, 4])
+                    if transport == 'rtu':
+                        self.assertGreater(result['counters']['read_ambiguous'], 0)
+
+    def test_unsent_group_keeps_priority_after_budget_expires(self):
+        points = [dict(operation='read-input', data_type='uint16', address=a) for a in (0, 4)]
+        result, observed = self.exercise('rtu', points, 'slow-first')
+        self.assertEqual(result['counters']['schedule_missed'], 1)
+        self.assertEqual([address for _, address in observed], [0, 4, 0, 0, 4])
+
+    def test_mixed_task_keeps_write_order_after_read_timeout(self):
+        points = [dict(operation=op, data_type='uint16', address=a)
+                  for op, a in [('read-input', 0), ('write-single', 4)]]
+        _, observed = self.exercise('rtu', points, 'timeout')
+        self.assertEqual(observed, [(4, 0)] * 3)
 
     def test_ambiguous_rtu_exception_remains_unresolved(self):
         points = [dict(operation='read-input', data_type='uint16', address=address) for address in (0, 4)]

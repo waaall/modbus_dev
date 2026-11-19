@@ -196,7 +196,7 @@ class RtuEngine:
                 if received > deadline:
                     self.mark_uncertain("Reply delivered after deadline")
                     self.inflight = False
-                    return Reply("late_reply", sent_s=sent, received_s=received, ambiguous=True)
+                    return Reply("late_reply", sent_s=sent, received_s=received, ambiguous=True, submitted_before_timeout=True)
                 status = "exception" if pdu.isError() else "ack" if request.function in (6, 16) else "read"
                 self.inflight = False
                 return Reply(status, tuple(pdu.registers), sent, received, self.uncertain,
@@ -207,4 +207,4 @@ class RtuEngine:
         self.mark_uncertain("No matching response before transaction deadline")
         self.inflight = False
         return Reply("bad_reply" if total else "timeout", sent_s=sent, ambiguous=True,
-                     detail=f"No matching response within budget; received {total} bytes")
+                     submitted_before_timeout=not total, detail=f"No matching response within budget; received {total} bytes")

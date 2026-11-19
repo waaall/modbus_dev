@@ -220,4 +220,5 @@ class TcpMasterEngine:
             unknown = self._unknown_write(request, tid, sent, written, len(packet))
             self.close()
             status = "timeout" if isinstance(exc, TimeoutError) else "bad_reply" if isinstance(exc, ValueError) else "connection_lost"
-            return Reply(status, sent_s=sent, detail=str(exc), outcome_unknown=unknown)
+            return Reply(status, sent_s=sent, detail=str(exc), outcome_unknown=unknown,
+                         submitted_before_timeout=status == "timeout" and written == len(packet) and written > 0)

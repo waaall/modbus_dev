@@ -235,6 +235,8 @@ class SessionRunner:
                     origin = self.control.now() + .1
                     schedule = AbsoluteSchedule(origin, self.config.period_ms / 1000,
                                                 self.config.timeout_ms / 1000, self.config.policy)
+                    rotate_reads = self.config.policy == "continuous" and not usage.writing
+                    read_start = 0
                     slot = 0
                     while not self.config.duration_s or slot * schedule.period < self.config.duration_s:
                         decision = schedule.at(slot, self.control.now())
@@ -251,6 +253,9 @@ class SessionRunner:
                         # 预先确定整轮计划；传输可在此释放需要轮换的连接，但不能暗中建连。
                         values = source.sample(slot) if source is not None else ()
                         requests = cycle_requests(self.config, values, slot=slot)
+                        # 纯读取计划跨周期稳定；只改变起点，不携带上一轮的请求或预算。
+                        if read_start:
+                            requests = requests[read_start:] + requests[:read_start]
                         self.engine.prepare_cycle(requests)
                         if not self.engine.connected:
                             if self.control.now() < reconnect_at:
@@ -278,7 +283,8 @@ class SessionRunner:
                         try:
                             # 明确拒绝的写入不再读回验证；独立请求仍共享原来的截止预算。
                             rejected_writes = []
-                            for request in requests:
+                            cycle_start = read_start
+                            for index, request in enumerate(requests):
                                 if request.function == 3 and request.registers and any(
                                         request.address < end and start < request.address + request.count
                                         for start, end in rejected_writes):
@@ -287,6 +293,9 @@ class SessionRunner:
                                                "verification", slot=slot, address=request.address, count=request.count)
                                     continue
                                 reply = self._transaction(request, decision.deadline_s, slot, decision.scheduled_s)
+                                if rotate_reads and reply.status in ("timeout", "late_reply", "schedule_missed"):
+                                    # 已提交后超时让位给下一组；未提交则保留该组的机会。
+                                    read_start = (cycle_start + index + int(reply.submitted_before_timeout)) % len(requests)
                                 if reply.status == "read" and request.registers and reply.registers != request.registers:
                                     self.counters["readback_mismatch"] += 1
                                     self._emit("readback_mismatch", "Readback differs from source registers", "ERROR",
@@ -307,6 +316,9 @@ class SessionRunner:
                                     break
                                 if not self.engine.connected:
                                     break
+                            else:
+                                # 整轮完成后恢复规划器的默认顺序。
+                                read_start = 0
                         except (OSError, ValueError) as exc:
                             self.counters["io_errors"] += 1
                             if usage.serial:
